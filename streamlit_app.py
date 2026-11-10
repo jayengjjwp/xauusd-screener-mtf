@@ -169,10 +169,10 @@ tf_labels = {
 def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
   if bias == "BUY":
     entry = current_price
-    sl = round(bot_bb - 3.0, 2)  # Di bawah Bottom BB
-    tp1 = round(mid_bb, 2)  # Target 1 di Mid BB
-    tp2 = round(top_bb - 4.0, 2)  # Target 2 mendekati Top BB
-    tp3 = round(top_bb, 2)  # Target 3 di Top BB
+    sl = round(bot_bb - 3.0, 2)
+    tp1 = round(mid_bb, 2)
+    tp2 = round(top_bb - 4.0, 2)
+    tp3 = round(top_bb, 2)
 
     risk = entry - sl
     reward = tp1 - entry
@@ -180,7 +180,7 @@ def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
 
   elif bias == "SELL":
     entry = current_price
-    sl = round(top_bb + 3.0, 2)  # Di atas Top BB
+    sl = round(top_bb + 3.0, 2)  # Di atas Top BB untuk Sell
     tp1 = round(mid_bb, 2)  # Target 1 di Mid BB
     tp2 = round(bot_bb + 4.0, 2)  # Target 2 mendekati Bottom BB
     tp3 = round(bot_bb, 2)  # Target 3 di Bottom BB
@@ -203,8 +203,10 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
   syarat_tf2 = "-"
   syarat_tf3 = "-"
   kesimpulan = "-"
+  # Menentukan arah bias utama berdasarkan TF1 (Setup Utama)
+  dominant_bias = d1["bias"]
 
-  if "BUY" in d1["bias"]:
+  if "BUY" in dominant_bias:
     syarat_tf2 = "Wajib MHV / Extreme Buy (Penolakan Bottom BB)"
     syarat_tf3 = "Wajib CSAK Buy / Breakout MA5/10 High untuk Entry"
 
@@ -228,7 +230,7 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
           " ada penolakan."
       )
 
-  elif "SELL" in d1["bias"]:
+  elif "SELL" in dominant_bias:
     syarat_tf2 = "Wajib MHV / Extreme Sell (Penolakan Top BB)"
     syarat_tf3 = "Wajib CSAK Sell / Breakout MA5/10 Low untuk Entry"
 
@@ -254,6 +256,7 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
 
   return {
       "valid_signal": valid_signal,
+      "dominant_bias": dominant_bias,
       "tf1_act": d1["status"],
       "tf1_detail": d1["detail"],
       "tf2_act": d2["status"],
@@ -297,10 +300,13 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 def render_tab_content(tf1, tf2, tf3):
   eval_res = evaluate_combo(tf1, tf2, tf3)
-  d_exec = tf_data[tf3]  # Acuan TP/SL menggunakan TF Eksekusi (TF3)
+  d_exec = tf_data[tf3]
+
+  # Paksa arah bias eksekusi mengikuti hirarki tren utama (TF1) agar tidak bentrok
+  execution_bias = eval_res["dominant_bias"]
 
   entry, sl, tp1, tp2, tp3, rrr = calculate_trade_levels(
-      d_exec["bias"],
+      execution_bias,
       d_exec["price"],
       d_exec["top_bb"],
       d_exec["mid_bb"],
@@ -312,7 +318,7 @@ def render_tab_content(tf1, tf2, tf3):
   col2.metric(
       "Risk-to-Reward Ratio (RRR)", f"1 : {rrr}" if rrr > 0 else "-"
   )
-  col3.metric("Arah Bias Eksekusi", d_exec["bias"])
+  col3.metric("Arah Bias Eksekusi", execution_bias)
 
   st.info(eval_res["kesimpulan"])
 
