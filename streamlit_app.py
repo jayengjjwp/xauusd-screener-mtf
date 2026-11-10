@@ -9,8 +9,8 @@ st.set_page_config(
 
 st.title("⚡ XAUUSD BBMA Oma Ally - Multi-Timeframe Matrix Screener")
 st.markdown(
-    "Analisis hirarki multi-timeframe (Setup TF1 ➔ Confirm TF2 ➔ Entry TF3)"
-    " untuk deteksi Re-Entry Buy & Sell."
+    "Analisis hirarki multi-timeframe sesuai standar Oma Ally (Termasuk"
+    " Resample H4 dari data H1)."
 )
 st.markdown("---")
 
@@ -35,6 +35,19 @@ def fetch_tf_data(interval, period):
     return df
   except Exception:
     return pd.DataFrame()
+
+
+def resample_to_h4(df_h1):
+  if df_h1.empty:
+    return pd.DataFrame()
+  # Resample data 1H menjadi 4H
+  df_h4 = df_h1.resample("4h").agg({
+      "Open": "first",
+      "High": "max",
+      "Low": "min",
+      "Close": "last",
+  })
+  return df_h4.dropna()
 
 
 def analyze_bbma_tf(df):
@@ -88,7 +101,6 @@ def analyze_bbma_tf(df):
   bias = "NEUTRAL"
   detail = "-"
 
-  # 1. Extreme / Re-Entry Sell Zone (Atas)
   if high >= top_bb or prev["High"] >= prev["TopBB"]:
     status = "EXTREME / MHV SELL"
     bias = "SELL"
@@ -97,8 +109,6 @@ def analyze_bbma_tf(df):
     status = "RE-ENTRY SELL / RETRACEMENT HIGH"
     bias = "SELL"
     detail = "Harga berada di area MA5/10 High di atas Mid BB"
-
-  # 2. Extreme / Re-Entry Buy Zone (Bawah)
   elif low <= bot_bb or prev["Low"] <= prev["BottomBB"]:
     status = "EXTREME / MHV BUY"
     bias = "BUY"
@@ -107,8 +117,6 @@ def analyze_bbma_tf(df):
     status = "RE-ENTRY BUY / RETRACEMENT LOW"
     bias = "BUY"
     detail = "Harga berada di area MA5/10 Low di bawah Mid BB"
-
-  # 3. Mid BB / Sideway Transitions
   elif c_price > mid_bb:
     status = "BULLISH BIAS (Di atas Mid BB)"
     bias = "BUY"
@@ -131,29 +139,34 @@ def analyze_bbma_tf(df):
   }
 
 
-# Mapping interval yfinance & period download
-tf_config = {
-    "1d": {"period": "60d", "label": "Daily (D1)"},
-    "1h": {"period": "7d", "label": "H1"},
-    "15m": {"period": "5d", "label": "M15"},
-    "5m": {"period": "1d", "label": "M5"},
-    "1m": {"period": "1d", "label": "M1"},
+# Fetch Data Dasar
+with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
+  df_1d = fetch_tf_data("1d", "60d")
+  df_1h = fetch_tf_data("1h", "14d")
+  df_15m = fetch_tf_data("15m", "5d")
+  df_5m = fetch_tf_data("5m", "1d")
+  df_1m = fetch_tf_data("1m", "1d")
+
+  # Buat H4 dari resample data H1
+  df_4h = resample_to_h4(df_1h)
+
+tf_data = {
+    "1d": analyze_bbma_tf(df_1d),
+    "4h": analyze_bbma_tf(df_4h),
+    "1h": analyze_bbma_tf(df_1h),
+    "15m": analyze_bbma_tf(df_15m),
+    "5m": analyze_bbma_tf(df_5m),
+    "1m": analyze_bbma_tf(df_1m),
 }
 
-# Fetch Data per TF
-tf_data = {}
-with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
-  for tf_key, cfg in tf_config.items():
-    raw_df = fetch_tf_data(tf_key, cfg["period"])
-    tf_data[tf_key] = analyze_bbma_tf(raw_df)
-
-# Karena yfinance tidak menyediakan interval native 4h, H4 diestimasi dari H1 atau ditandai
-# Di sini kita menyajikan 4 Kombo Utama yang didukung yfinance data
-combos = [
-    {"name": "D1 - H1 - M15 (Swing / Long-term)", "tf1": "1d", "tf3": "15m"},
-    {"name": "H1 - M15 - M5 (Intraday Scalp)", "tf1": "1h", "tf3": "5m"},
-    {"name": "M15 - M5 - M1 (Micro Scalp)", "tf1": "15m", "tf3": "1m"},
-]
+tf_labels = {
+    "1d": "Daily (D1)",
+    "4h": "H4 (Resampled)",
+    "1h": "H1",
+    "15m": "M15",
+    "5m": "M5",
+    "1m": "M1",
+}
 
 
 def evaluate_combo(tf1_code, tf2_code, tf3_code):
@@ -166,7 +179,6 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
   syarat_tf3 = "-"
   kesimpulan = "-"
 
-  # Logika Re-Entry BUY (Top-Down Validation)
   if "BUY" in d1["bias"]:
     syarat_tf2 = "Wajib MHV / Extreme Buy (Penolakan Bottom BB)"
     syarat_tf3 = "Wajib CSAK Buy / Breakout MA5/10 High untuk Entry"
@@ -174,23 +186,23 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
     if "BUY" in d2["bias"] and "BUY" in d3["bias"]:
       valid_signal = "VALID RE-ENTRY BUY"
       kesimpulan = (
-          "✅ Alignment Sempurna! TF1 Setup Re-Entry Buy, TF2 Confirm CS"
-          " Penolakan, TF3 Siap Eksekusi Buy."
+          f"✅ Alignment Sempurna! {tf_labels[tf1_code]} Setup Buy,"
+          f" {tf_labels[tf2_code]} Confirm Penolakan, {tf_labels[tf3_code]} Siap"
+          " Eksekusi."
       )
     elif "BUY" in d2["bias"]:
       valid_signal = "MENUNGGU CONFIRMATION TF3"
       kesimpulan = (
-          "⏳ TF1 & TF2 Sudah Valid Buy. Tunggu Trigger CSAK/Momentum Buy di"
-          " TF3."
+          f"⏳ {tf_labels[tf1_code]} & {tf_labels[tf2_code]} Valid Buy. Tunggu"
+          f" Trigger di {tf_labels[tf3_code]}."
       )
     else:
       valid_signal = "-"
       kesimpulan = (
-          "❌ Belum Valid. TF2 masih mengalami koreksi turun/belum ada"
-          " penolakan."
+          f"❌ Belum Valid. {tf_labels[tf2_code]} masih koreksi turun / belum"
+          " ada penolakan."
       )
 
-  # Logika Re-Entry SELL (Top-Down Validation)
   elif "SELL" in d1["bias"]:
     syarat_tf2 = "Wajib MHV / Extreme Sell (Penolakan Top BB)"
     syarat_tf3 = "Wajib CSAK Sell / Breakout MA5/10 Low untuk Entry"
@@ -198,20 +210,21 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
     if "SELL" in d2["bias"] and "SELL" in d3["bias"]:
       valid_signal = "VALID RE-ENTRY SELL"
       kesimpulan = (
-          "✅ Alignment Sempurna! TF1 Setup Re-Entry Sell, TF2 Confirm CS"
-          " Penolakan, TF3 Siap Eksekusi Sell."
+          f"✅ Alignment Sempurna! {tf_labels[tf1_code]} Setup Sell,"
+          f" {tf_labels[tf2_code]} Confirm Penolakan, {tf_labels[tf3_code]} Siap"
+          " Eksekusi."
       )
     elif "SELL" in d2["bias"]:
       valid_signal = "MENUNGGU CONFIRMATION TF3"
       kesimpulan = (
-          "⏳ TF1 & TF2 Sudah Valid Sell. Tunggu Trigger CSAK/Momentum Sell di"
-          " TF3."
+          f"⏳ {tf_labels[tf1_code]} & {tf_labels[tf2_code]} Valid Sell. Tunggu"
+          f" Trigger di {tf_labels[tf3_code]}."
       )
     else:
       valid_signal = "-"
       kesimpulan = (
-          "❌ Belum Valid. TF2 masih mengalami retracement naik/belum ada"
-          " penolakan."
+          f"❌ Belum Valid. {tf_labels[tf2_code]} masih retracement naik / belum"
+          " ada penolakan."
       )
 
   return {
@@ -226,17 +239,15 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
   }
 
 
-# Live Price Overview
 live_price = tf_data["1h"]["price"]
 st.metric("Live XAUUSD Price", f"${live_price:,.2f}")
 
 st.subheader("📌 Matriks Status Multi-Timeframe")
-
 matrix_rows = []
-for code, cfg in tf_config.items():
+for code, label in tf_labels.items():
   res = tf_data[code]
   matrix_rows.append({
-      "Timeframe": cfg["label"],
+      "Timeframe": label,
       "Status Saat Ini": res["status"],
       "Arah Bias": res["bias"],
       "Top BB": f"${res['top_bb']:,.2f}" if res["top_bb"] > 0 else "-",
@@ -250,73 +261,49 @@ st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True)
 st.markdown("---")
 st.subheader("🎯 Deteksi Validitas Re-Entry Kombinasi TF")
 
-# Tab Hirarki TF
-tab1, tab2, tab3 = st.tabs(
-    ["D1 ➔ H1 ➔ M15", "H1 ➔ M15 ➔ M5", "M15 ➔ M5 ➔ M1"]
-)
+# Tab Hirarki Sesuai Permintaan Anda
+tab1, tab2, tab3, tab4 = st.tabs([
+    "D1 ➔ H4 ➔ H1",
+    "H4 ➔ H1 ➔ M15",
+    "H1 ➔ M15 ➔ M5",
+    "M15 ➔ M5 ➔ M1",
+])
+
+
+def render_tab_content(tf1, tf2, tf3):
+  eval_res = evaluate_combo(tf1, tf2, tf3)
+  col1, col2 = st.columns([1, 2])
+  col1.metric("Status Signal", eval_res["valid_signal"])
+  col2.info(eval_res["kesimpulan"])
+
+  st.table(
+      pd.DataFrame([{
+          "Peran": f"TF 1 (Setup Utama - {tf_labels[tf1]})",
+          "Kondisi Saat Ini": eval_res["tf1_act"],
+          "Detail Aktivitas": eval_res["tf1_detail"],
+          "Syarat Ideal Re-Entry": "-",
+      }, {
+          "Peran": f"TF 2 (Konfirmasi - {tf_labels[tf2]})",
+          "Kondisi Saat Ini": eval_res["tf2_act"],
+          "Detail Aktivitas": "-",
+          "Syarat Ideal Re-Entry": eval_res["tf2_req"],
+      }, {
+          "Peran": f"TF 3 (Eksekusi - {tf_labels[tf3]})",
+          "Kondisi Saat Ini": eval_res["tf3_act"],
+          "Detail Aktivitas": "-",
+          "Syarat Ideal Re-Entry": eval_res["tf3_req"],
+      }])
+  )
+
 
 with tab1:
-  eval1 = evaluate_combo("1d", "1h", "15m")
-  col1, col2 = st.columns([1, 2])
-  col1.metric("Status Signal", eval1["valid_signal"])
-  col2.info(eval1["kesimpulan"])
-
-  st.table(
-      pd.DataFrame([{
-          "Peran": "TF 1 (Setup Utama - D1)",
-          "Kondisi Saat Ini": eval1["tf1_act"],
-          "Detail Aktivitas": eval1["tf1_detail"],
-      }, {
-          "Peran": "TF 2 (Konfirmasi - H1)",
-          "Kondisi Saat Ini": eval1["tf2_act"],
-          "Syarat Ideal Re-Entry": eval1["tf2_req"],
-      }, {
-          "Peran": "TF 3 (Eksekusi - M15)",
-          "Kondisi Saat Ini": eval1["tf3_act"],
-          "Syarat Ideal Re-Entry": eval1["tf3_req"],
-      }])
-  )
+  render_tab_content("1d", "4h", "1h")
 
 with tab2:
-  eval2 = evaluate_combo("1h", "15m", "5m")
-  col1, col2 = st.columns([1, 2])
-  col1.metric("Status Signal", eval2["valid_signal"])
-  col2.info(eval2["kesimpulan"])
-
-  st.table(
-      pd.DataFrame([{
-          "Peran": "TF 1 (Setup Utama - H1)",
-          "Kondisi Saat Ini": eval2["tf1_act"],
-          "Detail Aktivitas": eval2["tf1_detail"],
-      }, {
-          "Peran": "TF 2 (Konfirmasi - M15)",
-          "Kondisi Saat Ini": eval2["tf2_act"],
-          "Syarat Ideal Re-Entry": eval2["tf2_req"],
-      }, {
-          "Peran": "TF 3 (Eksekusi - M5)",
-          "Kondisi Saat Ini": eval2["tf3_act"],
-          "Syarat Ideal Re-Entry": eval2["tf3_req"],
-      }])
-  )
+  render_tab_content("4h", "1h", "15m")
 
 with tab3:
-  eval3 = evaluate_combo("15m", "5m", "1m")
-  col1, col2 = st.columns([1, 2])
-  col1.metric("Status Signal", eval3["valid_signal"])
-  col2.info(eval3["kesimpulan"])
+  render_tab_content("1h", "15m", "5m")
 
-  st.table(
-      pd.DataFrame([{
-          "Peran": "TF 1 (Setup Utama - M15)",
-          "Kondisi Saat Ini": eval3["tf1_act"],
-          "Detail Aktivitas": eval3["tf1_detail"],
-      }, {
-          "Peran": "TF 2 (Konfirmasi - M5)",
-          "Kondisi Saat Ini": eval3["tf2_act"],
-          "Syarat Ideal Re-Entry": eval3["tf2_req"],
-      }, {
-          "Peran": "TF 3 (Eksekusi - M1)",
-          "Kondisi Saat Ini": eval3["tf3_act"],
-          "Syarat Ideal Re-Entry": eval3["tf3_req"],
-      }])
-  )
+with tab4:
+  render_tab_content("15m", "5m", "1m")
