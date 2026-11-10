@@ -7,10 +7,10 @@ st.set_page_config(
     page_title="XAUUSD BBMA Oma Ally Multi-TF Matrix", layout="wide"
 )
 
-st.title("⚡ XAUUSD BBMA Oma Ally - Multi-Timeframe Matrix Screener")
+st.title("⚡ XAUUSD BBMA Oma Ally - Multi-Timeframe Screener & TP/SL Calculator")
 st.markdown(
-    "Analisis hirarki multi-timeframe sesuai standar Oma Ally (Termasuk"
-    " Resample H4 dari data H1)."
+    "Analisis hirarki multi-timeframe lengkap dengan proyeksi Target Profit"
+    " (TP1, TP2, TP3), Stop Loss (SL), dan Risk-to-Reward Ratio."
 )
 st.markdown("---")
 
@@ -40,7 +40,6 @@ def fetch_tf_data(interval, period):
 def resample_to_h4(df_h1):
   if df_h1.empty:
     return pd.DataFrame()
-  # Resample data 1H menjadi 4H
   df_h4 = df_h1.resample("4h").agg({
       "Open": "first",
       "High": "max",
@@ -146,8 +145,6 @@ with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
   df_15m = fetch_tf_data("15m", "5d")
   df_5m = fetch_tf_data("5m", "1d")
   df_1m = fetch_tf_data("1m", "1d")
-
-  # Buat H4 dari resample data H1
   df_4h = resample_to_h4(df_1h)
 
 tf_data = {
@@ -167,6 +164,34 @@ tf_labels = {
     "5m": "M5",
     "1m": "M1",
 }
+
+
+def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
+  if bias == "BUY":
+    entry = current_price
+    sl = round(bot_bb - 3.0, 2)  # Di bawah Bottom BB
+    tp1 = round(mid_bb, 2)  # Target 1 di Mid BB
+    tp2 = round(top_bb - 4.0, 2)  # Target 2 mendekati Top BB
+    tp3 = round(top_bb, 2)  # Target 3 di Top BB
+
+    risk = entry - sl
+    reward = tp1 - entry
+    rrr = round(reward / risk, 2) if risk > 0 else 0.0
+
+  elif bias == "SELL":
+    entry = current_price
+    sl = round(top_bb + 3.0, 2)  # Di atas Top BB
+    tp1 = round(mid_bb, 2)  # Target 1 di Mid BB
+    tp2 = round(bot_bb + 4.0, 2)  # Target 2 mendekati Bottom BB
+    tp3 = round(bot_bb, 2)  # Target 3 di Bottom BB
+
+    risk = sl - entry
+    reward = entry - tp1
+    rrr = round(reward / risk, 2) if risk > 0 else 0.0
+  else:
+    entry, sl, tp1, tp2, tp3, rrr = 0, 0, 0, 0, 0, 0.0
+
+  return entry, sl, tp1, tp2, tp3, rrr
 
 
 def evaluate_combo(tf1_code, tf2_code, tf3_code):
@@ -259,9 +284,9 @@ for code, label in tf_labels.items():
 st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True)
 
 st.markdown("---")
-st.subheader("🎯 Deteksi Validitas Re-Entry Kombinasi TF")
+st.subheader("🎯 Deteksi Validitas Re-Entry & Manajemen Risiko (SL, TP, RRR)")
 
-# Tab Hirarki Sesuai Permintaan Anda
+# Tab Hirarki
 tab1, tab2, tab3, tab4 = st.tabs([
     "D1 ➔ H4 ➔ H1",
     "H4 ➔ H1 ➔ M15",
@@ -272,10 +297,52 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 def render_tab_content(tf1, tf2, tf3):
   eval_res = evaluate_combo(tf1, tf2, tf3)
-  col1, col2 = st.columns([1, 2])
-  col1.metric("Status Signal", eval_res["valid_signal"])
-  col2.info(eval_res["kesimpulan"])
+  d_exec = tf_data[tf3]  # Acuan TP/SL menggunakan TF Eksekusi (TF3)
 
+  entry, sl, tp1, tp2, tp3, rrr = calculate_trade_levels(
+      d_exec["bias"],
+      d_exec["price"],
+      d_exec["top_bb"],
+      d_exec["mid_bb"],
+      d_exec["bot_bb"],
+  )
+
+  col1, col2, col3 = st.columns(3)
+  col1.metric("Status Signal", eval_res["valid_signal"])
+  col2.metric(
+      "Risk-to-Reward Ratio (RRR)", f"1 : {rrr}" if rrr > 0 else "-"
+  )
+  col3.metric("Arah Bias Eksekusi", d_exec["bias"])
+
+  st.info(eval_res["kesimpulan"])
+
+  # Tabel Kalkulator TP & SL
+  st.markdown("#### 📋 Kalkulator Manajemen Risiko & Target Harga")
+  trade_table = pd.DataFrame([
+      {
+          "Parameter": "Zona Harga Entry",
+          "Nilai": f"${entry:,.2f}" if entry > 0 else "-",
+      },
+      {
+          "Parameter": "Stop Loss (SL)",
+          "Nilai": f"${sl:,.2f}" if sl > 0 else "-",
+      },
+      {
+          "Parameter": "Take Profit 1 (TP1 - Mid BB)",
+          "Nilai": f"${tp1:,.2f}" if tp1 > 0 else "-",
+      },
+      {
+          "Parameter": "Take Profit 2 (TP2)",
+          "Nilai": f"${tp2:,.2f}" if tp2 > 0 else "-",
+      },
+      {
+          "Parameter": "Take Profit 3 (TP3 - Extreme BB)",
+          "Nilai": f"${tp3:,.2f}" if tp3 > 0 else "-",
+      },
+  ])
+  st.dataframe(trade_table, use_container_width=True)
+
+  st.markdown("#### 🔍 Detail Hirarki Timeframe")
   st.table(
       pd.DataFrame([{
           "Peran": f"TF 1 (Setup Utama - {tf_labels[tf1]})",
