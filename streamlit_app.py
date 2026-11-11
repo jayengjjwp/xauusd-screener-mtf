@@ -191,25 +191,30 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
 
   # Evaluasi Berdasarkan Peran Timeframe
   if role_type == "TF1":
-    is_re_buy = c_price <= ma5_h and low <= ma10_l * 1.02
-    is_re_sell = c_price >= ma5_l and high >= ma10_h * 0.98
+    # Toleransi area Re-Entry MA 5/10 yang lebih fleksibel
+    is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
+    is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
 
     if is_re_buy:
       status = "RE-ENTRY BUY VALID (MA 5/10 Low)"
       bias = "BUY"
-      detail = "TF1 mendeteksi pullback valid di area MA 5/10 Low."
+      detail = (
+          "TF1 mendeteksi harga menyentuh/pullback valid di area MA 5/10 Low."
+      )
     elif is_re_sell:
       status = "RE-ENTRY SELL VALID (MA 5/10 High)"
       bias = "SELL"
-      detail = "TF1 mendeteksi koreksi valid di area MA 5/10 High."
+      detail = (
+          "TF1 mendeteksi harga menyentuh/koreksi valid di area MA 5/10 High."
+      )
     elif c_price > mid_bb:
       status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
       bias = "BUY"
-      detail = "Harga di atas Mid BB, condong mencari Re-Entry Buy."
+      detail = "Harga di atas Mid BB, mengincar Re-Entry Buy."
     else:
       status = "BEARISH BIAS (Menunggu Re-Entry Sell)"
       bias = "SELL"
-      detail = "Harga di bawah Mid BB, condong mencari Re-Entry Sell."
+      detail = "Harga di bawah Mid BB, mengincar Re-Entry Sell."
 
   elif role_type == "TF2":
     jenis_csak_b = csak_buy or momentum_buy
@@ -218,26 +223,29 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
     if extreme_buy or reject_bot_bb or reject_ema50_buy or jenis_csak_b:
       status = "TF2 KONFIRMASI BUY"
       bias = "BUY"
-      detail = "Struktur TF2 mendukung arah Buy."
+      detail = "Struktur TF2 mendukung konfirmasi Buy."
     elif extreme_sell or reject_top_bb or reject_ema50_sell or jenis_csak_s:
       status = "TF2 KONFIRMASI SELL"
       bias = "SELL"
-      detail = "Struktur TF2 mendukung arah Sell."
+      detail = "Struktur TF2 mendukung konfirmasi Sell."
     elif c_price > mid_bb:
       status = "TF2 BULLISH SEARAH"
       bias = "BUY"
-      detail = "Harga di atas Mid BB."
+      detail = "Harga di atas Mid BB (Konfirmasi Buy fleksibel)."
     else:
       status = "TF2 BEARISH SEARAH"
       bias = "SELL"
-      detail = "Harga di bawah Mid BB."
+      detail = "Harga di bawah Mid BB (Konfirmasi Sell fleksibel)."
 
   elif role_type == "TF3":
-    if momentum_buy or c_price <= bot_bb or csak_buy:
+    jenis_csak_b = csak_buy or momentum_buy
+    jenis_csak_s = csak_sell or momentum_sell
+
+    if momentum_buy or c_price <= bot_bb or jenis_csak_b:
       status = "TRIGGER BUY (Momentum/CSAK)"
       bias = "BUY"
       detail = "TF3 memicu pelatuk Buy."
-    elif momentum_sell or c_price >= top_bb or csak_sell:
+    elif momentum_sell or c_price >= top_bb or jenis_csak_s:
       status = "TRIGGER SELL (Momentum/CSAK)"
       bias = "SELL"
       detail = "TF3 memicu pelatuk Sell."
@@ -252,7 +260,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
     else:
       bias = "BUY" if c_price > mid_bb else "SELL"
       status = "TF3 BERJALAN MENGIKUTI MID BB"
-      detail = "Mengikuti posisi harga terhadap Mid BB."
+      detail = "Mengikuti posisi harga terhadap Mid BB di TF3."
 
   return {
       "price": c_price,
@@ -333,30 +341,29 @@ def evaluate_xauusd_automatic(tf1_code, tf2_code, tf3_code):
 
   dominant_bias = d1["bias"]
 
-  is_aligned = (
-      d1["bias"] == d2["bias"]
-      and d2["bias"] == d3["bias"]
-      and "VALID" in d1["status"]
-  )
+  # Logika Fleksibel: Setup valid jika TF1 sudah Re-Entry dan TF2/TF3 mendukung arah yang sama
+  is_reentry_tf1 = "RE-ENTRY" in d1["status"] or "BIAS" in d1["status"]
+  is_aligned = d1["bias"] == d2["bias"] or d1["bias"] == d3["bias"]
 
-  if is_aligned:
+  if is_reentry_tf1 and "VALID" in d1["status"] and is_aligned:
     valid_signal = f"🔥 PRO SETUP VALID ({dominant_bias})"
     kesimpulan = (
-        f"✅ **Alignment Otomatis Sempurna!** Timeframe utama ({tf1_code.upper()})"
-        f" memutuskan arah **{dominant_bias}**, divalidasi oleh"
-        f" {tf2_code.upper()}, dan dipicu di {tf3_code.upper()}."
+        f"✅ **Setup Re-Entry Terdeteksi!** Timeframe utama ({tf1_code.upper()})"
+        f" menunjukkan **{d1['status']}**, didukung oleh konfirmasi"
+        f" {tf2_code.upper()} & {tf3_code.upper()}."
     )
-  elif d1["bias"] == d2["bias"]:
-    valid_signal = f"⏳ MENUNGGU TRIGGER TF3 ({dominant_bias})"
+  elif is_reentry_tf1:
+    valid_signal = f"⏳ TF1 RE-ENTRY - MENUNGGU KONFIRMASI ({dominant_bias})"
     kesimpulan = (
-        f"⏳ TF1 & TF2 sepakat pada arah **{dominant_bias}**. Tunggu konfirmasi"
-        f" pelatuk matang di {tf3_code.upper()}."
+        f"⏳ **TF1 ({tf1_code.upper()}) sedang di area Re-Entry ({dominant_bias})**."
+        f" Pantau pergerakan konfirmasi di {tf2_code.upper()} dan pelatuk di"
+        f" {tf3_code.upper()}."
     )
   else:
-    valid_signal = "⚖️ KONSOLIDASI / MIXED BIAS"
+    valid_signal = f"⚖️ PANTAU MARKET ({dominant_bias})"
     kesimpulan = (
-        "⚠️ Belum ada keselarasan arah antar timeframe. Harap tunggu struktur"
-        " market lebih jelas."
+        f"ℹ️ Acuan utama TF1 menunjukkan arah **{dominant_bias}**. Tunggu harga"
+        " mendekati area MA 5/10 untuk membentuk Re-Entry."
     )
 
   return {
@@ -469,7 +476,7 @@ def render_tab_content(tf1, tf2, tf3):
       {
           "Parameter": "Harga Entry Saat Ini (TF3)",
           "Nilai Level Harga": f"${entry:,.2f}" if entry > 0 else "-",
-      },
+        },
       {
           "Parameter": "Stop Loss (SL)",
           "Nilai Level Harga": f"${sl:,.2f}" if sl > 0 else "-",
