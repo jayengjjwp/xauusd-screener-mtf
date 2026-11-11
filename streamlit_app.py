@@ -175,14 +175,12 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         last_csak_type = "SELL"
 
   # Tentukan Dominasi Struktur Berdasarkan Kejadian Terakhir (Kronologis)
-  # Jika ada CSAK atau Momentum Sell dominan di atas, override bias menjadi SELL
   structural_bias = "NEUTRAL"
   if momentum_sell or (last_csak_type == "SELL" and c_price < ema50):
     structural_bias = "SELL"
   elif momentum_buy or (last_csak_type == "BUY" and c_price > ema50):
     structural_bias = "BUY"
   else:
-    # Fallback ke posisi harga terhadap Mid BB dan EMA 50
     structural_bias = "BUY" if c_price > mid_bb else "SELL"
 
   status = "-"
@@ -191,7 +189,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
 
   # 2. Evaluasi Berdasarkan Peran Timeframe
   if role_type == "TF1":
-    # Acuan Re-Entry di MA 5/10
     is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
     is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
 
@@ -218,24 +215,14 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
 
   elif role_type == "TF2":
     if structural_bias == "BUY":
-      if (
-          momentum_buy
-          or cuk := (csak_buy)
-          or low <= bot_bb
-          or c_price > ema50
-      ):
+      if momentum_buy or low <= bot_bb or c_price > ema50:
         status = "TF2 KONFIRMASI BUY (Valid Struktur)"
         detail = "TF2 mengonfirmasi kenaikan (Extreme/Reject/CSAK/Momentum Buy)."
       else:
         status = "TF2 BULLISH SEARAH"
         detail = "Struktur TF2 mendukung kenaikan."
     else:
-      if (
-          momentum_sell
-          or cuk := (csak_sell)
-          or high >= top_bb
-          or c_price < ema50
-      ):
+      if momentum_sell or high >= top_bb or c_price < ema50:
         status = "TF2 KONFIRMASI SELL (Valid Struktur)"
         detail = "TF2 mengonfirmasi penurunan (Extreme/Reject/CSAK/Momentum Sell)."
       else:
@@ -247,7 +234,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
         detail = "TF3 membentuk Momentum atau Extreme Buy."
-      elif csak_buy:
+      elif cuk_buy := seperti_csak := csak_buy:
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy."
       else:
@@ -257,7 +244,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif csak_sell:
+      elif cuk_sell := seperti_csak_s := csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
@@ -490,7 +477,7 @@ def render_tab_content(tf1, tf2, tf3):
       },
       {
           "Parameter": "Take Profit 3 (Extreme BB)",
-          "Nilai Level Harga": f"${tp3:,.2f}" if tp3:,.2f else "-",
+          "Nilai Level Harga": f"${tp3:,.2f}" if tp3 > 0 else "-",
       },
   ])
   st.dataframe(trade_table, use_container_width=True)
