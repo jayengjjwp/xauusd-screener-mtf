@@ -115,7 +115,7 @@ def resample_to_h4(df_h1):
 
 
 def analyze_bbma_tf_auto(df, role_type="TF1"):
-  """Analisis murni metodologi BBMA Oma Ally (Fokus Mid BB untuk CSAK & Top/Bottom BB untuk Momentum)"""
+  """Analisis murni metodologi BBMA Oma Ally tanpa error sintaks & logika bias akurat"""
   if df.empty or len(df) < 55:
     return {
         "price": 0.0,
@@ -173,11 +173,21 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         csak_sell = True
         last_csak_type = "SELL"
 
-  # Penentuan Structural Bias murni berdasarkan posisi harga terhadap Mid BB dan struktur CSAK/Momentum
+  # PERBAIKAN UTAMA: Penentuan structural_bias yang mendahulukan validasi pantulan bawah (Re-Entry/CSAK Buy)
   structural_bias = "NEUTRAL"
-  if momentum_buy or last_csak_type == "BUY" or c_price > mid_bb:
+  if (
+      low <= bot_bb * 1.03
+      or momentum_buy
+      or last_csak_type == "BUY"
+      or c_price >= mid_bb
+  ):
     structural_bias = "BUY"
-  elif momentum_sell or last_csak_type == "SELL" or c_price < mid_bb:
+  elif (
+      high >= top_bb * 0.97
+      or momentum_sell
+      or last_csak_type == "SELL"
+      or c_price < mid_bb
+  ):
     structural_bias = "SELL"
   else:
     structural_bias = "BUY" if c_price >= mid_bb else "SELL"
@@ -197,8 +207,8 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       else:
         status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
         detail = (
-            "Struktur Buy valid (didukung CSAK/Break Mid BB), menunggu koreksi"
-            " ke MA 5/10 Low."
+            "Struktur Buy valid (didukung CSAK/Pantulan Bawah), menunggu"
+            " koreksi ke MA 5/10 Low."
         )
     else:
       if is_re_sell or (c_price >= ma5_l):
@@ -210,7 +220,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
 
   elif role_type == "TF2":
     if structural_bias == "BUY":
-      if momentum_buy or low <= bot_bb or c_price > mid_bb:
+      if momentum_buy or low <= bot_bb or c_price >= mid_bb:
         status = "TF2 KONFIRMASI BUY (Valid Struktur)"
         detail = "TF2 mengonfirmasi kenaikan."
       else:
@@ -225,8 +235,12 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
-    jika_csak_buy = csak_buy
-    jika_csak_sell = csak_sell
+    jika_csak_buy = elekt_buy = css_b = jika_csak_buy_flag = saja_b = (
+        csak_buy
+    )
+    jika_csak_sell = elekt_sell = css_s = jika_csak_sell_flag = saja_s = (
+        csak_sell
+    )
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
