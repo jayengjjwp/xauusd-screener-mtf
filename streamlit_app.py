@@ -145,7 +145,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   recent_df = df.tail(5)
   avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
-  # Deteksi Momentum Buy & Sell
+  # Deteksi Momentum & Extreme
   momentum_buy = any(recent_df["Close"] <= recent_df["BottomBB"]) or any(
       (recent_df["Low"] <= recent_df["BottomBB"])
       & (recent_df["Close"] < recent_df["Open"])
@@ -164,8 +164,9 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   reject_ema50_buy = low <= ema50 and c_price > ema50
   reject_ema50_sell = high >= ema50 and c_price < ema50
 
-  # Deteksi CSAK Buy / Sell dalam rolling window (aman & global)
-  csak_buy, cs_sell_detected = False, False
+  # Deteksi CSAK Buy / Sell dalam rolling window (Aman & Bersih dari Error)
+  csak_buy = False
+  csak_sell = False
   for i in range(len(df) - 4, len(df)):
     if i > 0:
       curr_c = df.iloc[i]
@@ -182,7 +183,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
           and float(prev_c["Close"]) >= float(prev_c["MA20"])
           and b_sz >= (avg_body * 0.9)
       ):
-        cs_sell_detected = True
+        csak_sell = True
 
   status = "-"
   bias = "NEUTRAL"
@@ -215,7 +216,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         extreme_buy
         or reject_bot_bb
         or reject_ema50_buy
-        or jika_csak_b := jika_csak_b if "jika_csak_b" in locals() else csak_buy
+        or cek_csak_buy := csak_buy
         or momentum_buy
     ):
       status = "TF2 KONFIRMASI BUY"
@@ -225,7 +226,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         extreme_sell
         or reject_top_bb
         or reject_ema50_sell
-        or cs_sell_detected
+        or cek_csak_sell := jika_csak_sell := csak_sell
         or momentum_sell
     ):
       status = "TF2 KONFIRMASI SELL"
@@ -241,11 +242,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       detail = "Harga di bawah Mid BB."
 
   elif role_type == "TF3":
-    if momentum_buy or c_price <= bot_bb or jika_csak_b:
+    if momentum_buy or c_price <= bot_bb or cek_csak_buy:
       status = "TRIGGER BUY (Momentum/CSAK)"
       bias = "BUY"
       detail = "TF3 memicu pelatuk Buy."
-    elif momentum_sell or c_price >= top_bb or cs_sell_detected:
+    elif momentum_sell or c_price >= top_bb or cek_csak_sell:
       status = "TRIGGER SELL (Momentum/CSAK)"
       bias = "SELL"
       detail = "TF3 memicu pelatuk Sell."
