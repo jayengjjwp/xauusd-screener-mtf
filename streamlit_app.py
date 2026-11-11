@@ -189,7 +189,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
 
   # Evaluasi Berdasarkan Peran Timeframe
   if role_type == "TF1":
-    # Cek apakah condong ke Re-Entry Buy atau Re-Entry Sell
     is_re_buy = c_price <= ma5_h and low <= ma10_l * 1.02
     is_re_sell = c_price >= ma5_l and high >= ma10_h * 0.98
 
@@ -215,7 +214,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         extreme_buy
         or reject_bot_bb
         or reject_ema50_buy
-        or jika_csak_b := csak_buy
+        or jika_csak_b
         or momentum_buy
     ):
       status = "TF2 KONFIRMASI BUY"
@@ -225,7 +224,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         extreme_sell
         or reject_top_bb
         or reject_ema50_sell
-        or jika_csak_s := csak_sell
+        or jika_csak_s
         or momentum_sell
     ):
       status = "TF2 KONFIRMASI SELL"
@@ -241,11 +240,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       detail = "Harga di bawah Mid BB."
 
   elif role_type == "TF3":
-    if momentum_buy or c_price <= bot_bb or jika_csak_b := csak_buy:
+    if momentum_buy or c_price <= bot_bb or jika_csak_b:
       status = "TRIGGER BUY (Momentum/CSAK)"
       bias = "BUY"
       detail = "TF3 memicu pelatuk Buy."
-    elif momentum_sell or c_price >= top_bb or jika_csak_s := csak_sell:
+    elif momentum_sell or c_price >= top_bb or jika_csak_s:
       status = "TRIGGER SELL (Momentum/CSAK)"
       bias = "SELL"
       detail = "TF3 memicu pelatuk Sell."
@@ -339,10 +338,8 @@ def evaluate_xauusd_automatic(tf1_code, tf2_code, tf3_code):
   d2 = analyze_bbma_tf_auto(globals()[f"df_{tf2_code}"], "TF2")
   d3 = analyze_bbma_tf_auto(globals()[f"df_{tf3_code}"], "TF3")
 
-  # Tentukan arah dominan otomatis berdasarkan keputusan TF1 (Acuan Utama)
   dominant_bias = d1["bias"]
 
-  # Cek apakah terjadi keselarasan (Alignment)
   is_aligned = (
       d1["bias"] == d2["bias"]
       and d2["bias"] == d3["bias"]
