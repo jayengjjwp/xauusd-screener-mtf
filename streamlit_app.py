@@ -226,20 +226,13 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
+    jika_csak_buy = csak_buy
+    jika_csak_sell = csak_sell
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
         detail = "TF3 membentuk Momentum atau Extreme Buy."
-      elif jika_csak_buy := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        # Membersihkan blok sisa walrus tanpa error syntax
-        pass
-
-      if termasuk_buy:  # Menggunakan hasil dari pengecekan struktur
-        pass
-
-      if jika_csak_buy := csak_buy:
+      elif jika_csak_buy:
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy."
       else:
@@ -249,15 +242,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif jika_csak_sell := termasuk_sell := hanya_saja_s := (
-          saja_val := abs(1)
-      ):
-        pass
-
-      if termasuk_sell:
-        pass
-
-      if jika_csak_sell := jika_csak_sell:
+      elif jika_csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
