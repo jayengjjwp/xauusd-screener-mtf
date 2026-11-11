@@ -115,7 +115,7 @@ def resample_to_h4(df_h1):
 
 
 def analyze_bbma_tf_auto(df, role_type="TF1"):
-  """Analisis murni metodologi BBMA Oma Ally tanpa error sintaks & logika bias akurat"""
+  """Analisis murni metodologi BBMA Oma Ally secara independen per timeframe"""
   if df.empty or len(df) < 55:
     return {
         "price": 0.0,
@@ -173,21 +173,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         csak_sell = True
         last_csak_type = "SELL"
 
-  # PERBAIKAN UTAMA: Penentuan structural_bias yang mendahulukan validasi pantulan bawah (Re-Entry/CSAK Buy)
+  # Penentuan Structural Bias secara objektif
   structural_bias = "NEUTRAL"
-  if (
-      low <= bot_bb * 1.03
-      or momentum_buy
-      or last_csak_type == "BUY"
-      or c_price >= mid_bb
-  ):
+  if low <= bot_bb * 1.03 or momentum_buy or last_csak_type == "BUY":
     structural_bias = "BUY"
-  elif (
-      high >= top_bb * 0.97
-      or momentum_sell
-      or last_csak_type == "SELL"
-      or c_price < mid_bb
-  ):
+  elif high >= top_bb * 0.97 or momentum_sell or last_csak_type == "SELL":
     structural_bias = "SELL"
   else:
     structural_bias = "BUY" if c_price >= mid_bb else "SELL"
@@ -235,12 +225,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
-    jika_csak_buy = elekt_buy = css_b = jika_csak_buy_flag = saja_b = (
-        csak_buy
+    jika_csak_buy = termasuk_buy = jika_csak_buy_flag = saja_b = (
+        csak_buy  # Bersih tanpa walrus
     )
-    jika_csak_sell = elekt_sell = css_s = jika_csak_sell_flag = saja_s = (
-        csak_sell
-    )
+    jika_csak_sell = termasuk_sell = jika_csak_sell_flag = saja_s = csak_sell
+
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
@@ -339,6 +328,7 @@ def evaluate_xauusd_automatic(tf1_code, tf2_code, tf3_code):
   d2 = analyze_bbma_tf_auto(globals()[f"df_{tf2_code}"], "TF2")
   d3 = analyze_bbma_tf_auto(globals()[f"df_{tf3_code}"], "TF3")
 
+  # Dominant bias mengikuti TF1 dari tab/paket aktif yang bersangkutan secara independen
   dominant_bias = d1["bias"]
 
   is_reentry_tf1 = "RE-ENTRY" in d1["status"] or "BIAS" in d1["status"]
@@ -353,8 +343,8 @@ def evaluate_xauusd_automatic(tf1_code, tf2_code, tf3_code):
   else:
     valid_signal = f"⏳ PANTAU STRUKTUR ({dominant_bias})"
     kesimpulan = (
-        f"ℹ️ Acuan TF1 menunjukkan bias **{dominant_bias}**. Menunggu harga"
-        " mencapai area MA 5/10 secara sempurna."
+        f"ℹ️ Acuan {tf1_code.upper()} menunjukkan bias **{dominant_bias}**."
+        " Menunggu harga mencapai area MA 5/10 secara sempurna."
     )
 
   return {
