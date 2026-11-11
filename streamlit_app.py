@@ -84,12 +84,12 @@ def resample_to_h4(df_h1):
 
 
 # -----------------------------------------------------------------------------
-# BBMA OMA ALLY ANALYSIS LOGIC WITH HISTORICAL TRIGGER CHECK
+# BBMA OMA ALLY ANALYSIS LOGIC WITH STRICT TRIGGER FILTER
 # -----------------------------------------------------------------------------
-def check_historical_trigger(df):
-  """Mendeteksi apakah ada riwayat CSAK atau Momentum dalam 5 candle terakhir
+def check_historical_trigger(df, expected_bias):
+  """Mendeteksi riwayat CSAK atau Momentum dalam 5 candle terakhir
 
-  sebagai syarat sah sebuah Re-Entry dalam metode BBMA Oma Ally.
+  yang wajib searah dengan bias tren (mencegah salah baca arah).
   """
   if len(df) < 10:
     return "Data Terlalu Singkat"
@@ -98,24 +98,23 @@ def check_historical_trigger(df):
     row = df.iloc[-i]
     prev_row = df.iloc[-(i + 1)]
 
-    # Deteksi Momentum (Close/High/Low menembus luar Bollinger Bands)
-    if row["Close"] >= row["TopBB"] or row["High"] >= row["TopBB"]:
-      return "Valid (Didasari Momentum Sell)"
-    if row["Close"] <= row["BottomBB"] or row["Low"] <= row["BottomBB"]:
-      return "Valid (Didasari Momentum Buy)"
-
-    # Deteksi CSAK (Candle Direction Sudirman/Kukuh yang memotong MA20)
-    body_size = abs(row["Close"] - row["Open"])
-    avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
-
-    if body_size > (avg_body * 1.2):
-      # PERBAIKAN: Menggunakan "MA20" sesuai nama kolom dataframe
+    if expected_bias == "BUY":
+      # Momentum Buy: Close/Low menembus Bottom BB
+      if row["Close"] <= row["BottomBB"] or row["Low"] <= row["BottomBB"]:
+        return "Valid (Didasari Momentum Buy)"
+      # CSAK Buy: Close memotong ke atas MA20 (Mid BB)
       if row["Close"] > row["MA20"] and prev_row["Close"] <= prev_row["MA20"]:
         return "Valid (Didasari CSAK Buy)"
+
+    elif expected_bias == "SELL":
+      # Momentum Sell: Close/High menembus Top BB
+      if row["Close"] >= row["TopBB"] or row["High"] >= row["TopBB"]:
+        return "Valid (Didasari Momentum Sell)"
+      # CSAK Sell: Close memotong ke bawah MA20 (Mid BB)
       if row["Close"] < row["MA20"] and prev_row["Close"] >= prev_row["MA20"]:
         return "Valid (Didasari CSAK Sell)"
 
-  return "Peringatan: Tanpa Trigger Baku (Hati-hati Re-Entry Lemah)"
+  return "Peringatan: Tanpa Trigger Baku yang Searah"
 
 
 def analyze_bbma_tf(df, is_tf1=False):
@@ -169,17 +168,25 @@ def analyze_bbma_tf(df, is_tf1=False):
   status = "-"
   bias = "NEUTRAL"
 
-  # Cek Validasi Historis Trigger (CSAK / Momentum)
-  trigger_status = check_historical_trigger(df)
+  # Tentukan Preliminary Bias berdasarkan posisi harga terhadap Mid BB dan MA5
+  if c_price >= mid_bb:
+    prelim_bias = "BUY"
+  else:
+    prelim_bias = "SELL"
+
+  # Cek Validasi Historis Trigger sesuai arah prelim bias
+  trigger_status = check_historical_trigger(df, prelim_bias)
 
   if is_tf1:
     if (c_price <= ma5_h) and (c_price >= mid_bb or low >= mid_bb):
       status = "VALID RE-ENTRY BUY (TF1 Tren)"
       bias = "BUY"
+      trigger_status = check_historical_trigger(df, "BUY")
       detail = f"Zona MA5/10 Low - Mid BB. {trigger_status}"
     elif (c_price >= ma5_l) and (c_price <= mid_bb or high <= mid_bb):
       status = "VALID RE-ENTRY SELL (TF1 Tren)"
       bias = "SELL"
+      trigger_status = check_historical_trigger(df, "SELL")
       detail = f"Zona MA5/10 High - Mid BB. {trigger_status}"
     elif c_price > mid_bb:
       status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
@@ -193,20 +200,24 @@ def analyze_bbma_tf(df, is_tf1=False):
     if c_price >= top_bb or (high >= top_bb and prev["High"] >= prev["TopBB"]):
       status = "MOMENTUM / EXTREME SELL"
       bias = "SELL"
+      trigger_status = check_historical_trigger(df, "SELL")
       detail = f"Terbentuk Extreme/Momentum di Top BB. {trigger_status}"
     elif c_price <= bot_bb or (
         low <= bot_bb and prev["Low"] <= prev["BottomBB"]
     ):
       status = "MOMENTUM / EXTREME BUY"
       bias = "BUY"
+      trigger_status = check_historical_trigger(df, "BUY")
       detail = f"Terbentuk Extreme/Momentum di Bottom BB. {trigger_status}"
     elif c_price >= ma5_h and c_price > mid_bb:
       status = "RE-ENTRY / CSAK SELL"
       bias = "SELL"
+      trigger_status = check_historical_trigger(df, "SELL")
       detail = f"Area Re-Entry/CSAK Sell. {trigger_status}"
     elif c_price <= ma5_l and c_price < mid_bb:
       status = "RE-ENTRY / CSAK BUY"
       bias = "BUY"
+      trigger_status = check_historical_trigger(df, "BUY")
       detail = f"Area Re-Entry/CSAK Buy. {trigger_status}"
     elif c_price > mid_bb:
       status = "BULLISH CONTINUATION"
