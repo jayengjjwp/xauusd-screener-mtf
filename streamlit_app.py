@@ -365,7 +365,7 @@ def calculate_trade_levels(
 
 
 # -----------------------------------------------------------------
-# 4. TARIK DATA & EVALUASI XAUUSD
+# 4. TARIK DATA & EVALUASI XAUUSD (DUA ARAH DINAMIS)
 # -----------------------------------------------------------------
 with st.spinner("Mengambil feed data multi-timeframe live XAUUSD..."):
   df_1h = fetch_tf_data("1h", "30d")
@@ -400,12 +400,15 @@ def evaluate_xauusd_combo(tf1_code, tf2_code, tf3_code, direction="RE-ENTRY BUY"
   elif d1["bias"] == target_bias and d2["bias"] == target_bias:
     valid_signal = "⏳ MENUNGGU TRIGGER TF3"
     kesimpulan = (
-        f"⏳ TF1 & TF2 sudah searah. Tunggu konfirmasi trigger eksekusi matang"
-        f" di {tf3_code.upper()}."
+        f"⏳ TF1 & TF2 sudah searah {target_bias}. Tunggu konfirmasi trigger"
+        f" eksekusi matang di {tf3_code.upper()}."
     )
   else:
     valid_signal = "❌ BELUM VALID"
-    kesimpulan = "❌ Hirarki timeframe belum searah atau belum berada di zona valid."
+    kesimpulan = (
+        f"❌ Hirarki timeframe belum searah {target_bias} atau belum berada di"
+        " zona valid."
+    )
 
   return {
       "valid_signal": valid_signal,
