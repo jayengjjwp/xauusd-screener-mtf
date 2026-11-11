@@ -230,7 +230,12 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
         detail = "TF3 membentuk Momentum atau Extreme Buy."
-      elif cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := csak_buy:
+      elif cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
+          csak_buy
+      ):
+        # Using a valid boolean evaluation instead of malformed assignment
+        pass
+      if cs_buy_cond := csak_buy:
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy."
       else:
@@ -240,9 +245,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif tikai_s := hanya_saja_s := termasuk_s := hanya_sell_check := (
-          csak_sell
-      ):
+      elif cs_sell_cond := csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
