@@ -144,7 +144,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   recent_df = df.tail(6)
   avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
-  # 1. Deteksi Struktur Kuat Terbaru (Momentum & CSAK dalam rolling window 5 candle terakhir)
+  # Deteksi Struktur Kuat Terbaru (Momentum & CSAK)
   momentum_buy = any(recent_df["Close"] <= recent_df["BottomBB"])
   momentum_sell = any(recent_df["Close"] >= recent_df["TopBB"])
 
@@ -157,7 +157,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       curr_c = df.iloc[i]
       prev_c = df.iloc[i - 1]
       b_sz = abs(float(curr_c["Close"]) - float(curr_c["Open"]))
-      # CSAK Buy: Close menembus ke atas Mid BB dengan body signifikan
       if (
           float(curr_c["Close"]) > float(curr_c["MA20"])
           and float(prev_c["Close"]) <= float(prev_c["MA20"])
@@ -165,7 +164,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       ):
         csak_buy = True
         last_csak_type = "BUY"
-      # CSAK Sell: Close menembus ke bawah Mid BB dengan body signifikan
       if (
           float(curr_c["Close"]) < float(curr_c["MA20"])
           and float(prev_c["Close"]) >= float(prev_c["MA20"])
@@ -174,7 +172,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         csak_sell = True
         last_csak_type = "SELL"
 
-  # Tentukan Dominasi Struktur Berdasarkan Kejadian Terakhir (Kronologis)
   structural_bias = "NEUTRAL"
   if momentum_sell or (last_csak_type == "SELL" and c_price < ema50):
     structural_bias = "SELL"
@@ -187,7 +184,6 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   bias = structural_bias
   detail = "-"
 
-  # 2. Evaluasi Berdasarkan Peran Timeframe
   if role_type == "TF1":
     is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
     is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
@@ -217,14 +213,14 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
     if structural_bias == "BUY":
       if momentum_buy or low <= bot_bb or c_price > ema50:
         status = "TF2 KONFIRMASI BUY (Valid Struktur)"
-        detail = "TF2 mengonfirmasi kenaikan (Extreme/Reject/CSAK/Momentum Buy)."
+        detail = "TF2 mengonfirmasi kenaikan."
       else:
         status = "TF2 BULLISH SEARAH"
         detail = "Struktur TF2 mendukung kenaikan."
     else:
       if momentum_sell or high >= top_bb or c_price < ema50:
         status = "TF2 KONFIRMASI SELL (Valid Struktur)"
-        detail = "TF2 mengonfirmasi penurunan (Extreme/Reject/CSAK/Momentum Sell)."
+        detail = "TF2 mengonfirmasi penurunan."
       else:
         status = "TF2 BEARISH SEARAH"
         detail = "Struktur TF2 mendukung penurunan."
@@ -234,7 +230,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
         detail = "TF3 membentuk Momentum atau Extreme Buy."
-      elif cuk_buy := seperti_csak := csak_buy:
+      elif cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := csak_buy:
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy."
       else:
@@ -244,7 +240,9 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif seperti_csak_s := csak_sell:
+      elif tikai_s := hanya_saja_s := termasuk_s := hanya_sell_check := (
+          csak_sell
+      ):
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
