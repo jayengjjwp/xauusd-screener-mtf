@@ -173,11 +173,17 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         csak_sell = True
         last_csak_type = "SELL"
 
-  # Penentuan Structural Bias secara objektif
+  # Deteksi Re-Entry secara spesifik
+  is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
+  is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
+
+  # Penentuan Structural Bias secara objektif berdasarkan kondisi riil harga
   structural_bias = "NEUTRAL"
-  if low <= bot_bb * 1.03 or momentum_buy or last_csak_type == "BUY":
+  if is_re_buy or low <= bot_bb * 1.03 or momentum_buy or last_csak_type == "BUY":
     structural_bias = "BUY"
-  elif high >= top_bb * 0.97 or momentum_sell or last_csak_type == "SELL":
+  elif (
+      is_re_sell or high >= top_bb * 0.97 or momentum_sell or last_csak_type == "SELL"
+  ):
     structural_bias = "SELL"
   else:
     structural_bias = "BUY" if c_price >= mid_bb else "SELL"
@@ -187,19 +193,13 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   detail = "-"
 
   if role_type == "TF1":
-    is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
-    is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
-
     if structural_bias == "BUY":
       if is_re_buy or (c_price <= ma5_h):
         status = "RE-ENTRY BUY VALID (MA 5/10 Low)"
         detail = "Harga pullback akurat di area MA 5/10 Low searah tren Buy."
       else:
         status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
-        detail = (
-            "Struktur Buy valid (didukung CSAK/Pantulan Bawah), menunggu"
-            " koreksi ke MA 5/10 Low."
-        )
+        detail = "Struktur Buy valid, menunggu koreksi sempurna ke MA 5/10 Low."
     else:
       if is_re_sell or (c_price >= ma5_l):
         status = "RE-ENTRY SELL VALID (MA 5/10 High)"
@@ -225,10 +225,8 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
-    jika_csak_buy = termasuk_buy = jika_csak_buy_flag = saja_b = (
-        csak_buy  # Bersih tanpa walrus
-    )
-    jika_csak_sell = termasuk_sell = jika_csak_sell_flag = saja_s = csak_sell
+    jika_csak_buy = termasuk_buy = saja_b = csak_buy
+    jika_csak_sell = termasuk_sell = saja_s = csak_sell
 
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
@@ -328,7 +326,6 @@ def evaluate_xauusd_automatic(tf1_code, tf2_code, tf3_code):
   d2 = analyze_bbma_tf_auto(globals()[f"df_{tf2_code}"], "TF2")
   d3 = analyze_bbma_tf_auto(globals()[f"df_{tf3_code}"], "TF3")
 
-  # Dominant bias mengikuti TF1 dari tab/paket aktif yang bersangkutan secara independen
   dominant_bias = d1["bias"]
 
   is_reentry_tf1 = "RE-ENTRY" in d1["status"] or "BIAS" in d1["status"]
