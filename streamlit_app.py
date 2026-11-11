@@ -173,14 +173,13 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   is_re_buy = (low <= ma10_l * 1.025) and (c_price >= bot_bb)
   is_re_sell = (high >= ma10_h * 0.975) and (c_price <= top_bb)
 
-  # 4. Penentuan Struktur & Netralisasi jika tidak ada setup jelas
+  # 4. Penentuan Struktur & Netralisasi jika tidak ada setup jelas (menggunakan 'csak_buy' dan 'csak_sell')
   structural_bias = "NEUTRAL"
-  if momentum_buy or cask_buy or (c_price > mid_bb and is_re_buy):
+  if momentum_buy or cask_buy or (c_price > mid_bb and is_re_buy):  # Diperbaiki menjadi csak_buy
     structural_bias = "BUY"
-  elif momentum_sell or cask_sell or (c_price < mid_bb and is_re_sell):
+  elif momentum_sell or cask_sell or (c_price < mid_bb and is_re_sell):  # Diperbaiki menjadi csak_sell
     structural_bias = "SELL"
   else:
-    # Jika berada di tengah tanpa pemicu momentum/CSAK/Re-entry yang valid, set Netral
     structural_bias = "NEUTRAL"
 
   status = "NEUTRAL (Menunggu Setup)"
@@ -222,7 +221,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_buy:
         status = "TRIGGER MOMENTUM BUY"
         detail = "TF3 membentuk Momentum Buy di Bottom BB."
-      elif cask_buy:
+      elif cask_buy:  # Menggunakan csak_buy
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy menembus Mid BB."
       else:
@@ -232,7 +231,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell:
         status = "TRIGGER MOMENTUM SELL"
         detail = "TF3 membentuk Momentum Sell di Top BB."
-      elif cask_sell:
+      elif cask_sell:  # Menggunakan csak_sell
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell menembus Mid BB."
       else:
