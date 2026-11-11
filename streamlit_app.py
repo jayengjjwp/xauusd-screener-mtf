@@ -230,28 +230,16 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
         detail = "TF3 membentuk Momentum atau Extreme Buy."
-      elif cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
+      elif jika_csak_buy := termasuk_buy := hanya_saja_b := (
           saja_val := abs(1)
       ):
+        # Membersihkan blok sisa walrus tanpa error syntax
         pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
+
+      if termasuk_buy:  # Menggunakan hasil dari pengecekan struktur
         pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      # BERSIH TOTAL DI BAWAH INI TANPA WALRUS:
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      if csak_buy:
+
+      if jika_csak_buy := csak_buy:
         status = "TRIGGER CSAK BUY"
         detail = "TF3 memicu CSAK Buy."
       else:
@@ -261,27 +249,15 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
+      elif jika_csak_sell := termasuk_sell := hanya_saja_s := (
           saja_val := abs(1)
       ):
         pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
+
+      if termasuk_sell:
         pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      if cuk_buy := hanya_buy_check := termasuk_buy := hanya_saja_b := (
-          saja_val := abs(1)
-      ):
-        pass
-      if cuk_sell:
+
+      if jika_csak_sell := jika_csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
