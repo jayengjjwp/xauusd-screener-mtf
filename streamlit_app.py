@@ -18,7 +18,7 @@ st.markdown(
     f"📅 **Waktu Akses:** {datetime.now().strftime('%A, %d %B %Y - %H:%M')} WIB | "
     "Sistem validasi hierarki ketat dua arah: **TF1 (Acuan Re-Entry MA 5/10) ➔"
     " TF2 (Konfirmasi Fleksibel) ➔ TF3 (Eksekusi/Trigger)** khusus pasangan"
-    f" **XAUUSD**."
+    f" **XAUUSD**[cite: 3]."
 )
 
 
@@ -236,7 +236,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
         detail = "Belum memenuhi syarat Re-Entry Sell."
 
   # ==========================================
-  # 2. LOGIKA TF2 (KONFIRMASI FLEKSIBEL: Extreme / Re-Entry / Reject BB / Reject EMA 50 / CSAK / Momentum)
+  # 2. LOGIKA TF2 (KONFIRMASI FLEKSIBEL)
   # ==========================================
   elif role_type == "TF2":
     if target_bias == "BUY":
@@ -244,7 +244,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
           extreme_buy
           or reject_bot_bb
           or reject_ema50_buy
-          or, csak_detected
+          or csak_detected
           or momentum_detected
           or (c_price <= ma5_h and low <= ma10_l * 1.02)
       ):
@@ -267,7 +267,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
           extreme_sell
           or reject_top_bb
           or reject_ema50_sell
-          or, csak_detected
+          or csak_detected
           or momentum_detected
           or (c_price >= ma5_l and high >= ma10_h * 0.98)
       ):
@@ -287,7 +287,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
         detail = "TF2 belum menunjukkan konfirmasi Sell."
 
   # ==========================================
-  # 3. LOGIKA TF3 (EKSEKUSI / TRIGGER: Full Setup / Re-Entry / CSAK / Momentum)
+  # 3. LOGIKA TF3 (EKSEKUSI / TRIGGER)
   # ==========================================
   elif role_type == "TF3":
     if target_bias == "BUY":
