@@ -3,29 +3,48 @@ import pandas as pd
 import streamlit as st
 import yfinance as yf
 
+# -----------------------------------------------------------------------------
+# CONFIG & PAGE TITLE
+# -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="XAUUSD BBMA Oma Ally Multi-TF Matrix", layout="wide"
+    page_title="XAUUSD BBMA Oma Ally Multi-TF Matrix",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 st.title("⚡ XAUUSD BBMA Oma Ally - Multi-Timeframe Screener & TP/SL Calculator")
 st.markdown(
-    "Analisis hirarki ketat: TF1 khusus Re-Entry Tren, sedangkan TF2 & TF3 "
-    "memvalidasi Momentum, Extreme, MHV, CSAK, dan Re-Entry."
+    "**Analisis Hirarki BBMA Oma Ally:** TF1 menentukan acuan Re-Entry Tren, "
+    "sedangkan TF2 & TF3 memvalidasi struktur (Momentum, Extreme, MHV, CSAK, dan Re-Entry Eksekusi)."
 )
 st.markdown("---")
 
+# -----------------------------------------------------------------------------
+# SIDEBAR - RISK & MONEY MANAGEMENT CALCULATOR
+# -----------------------------------------------------------------------------
+st.sidebar.header("🛡️ Money Management Settings")
+balance = st.sidebar.number_input(
+    "Modal Akun ($)", min_value=10.0, value=1000.0, step=100.0
+)
+risk_pct = st.sidebar.slider(
+    "Risiko per Trade (%)", min_value=0.5, max_value=5.0, value=1.0, step=0.5
+)
+risk_amount = balance * (risk_pct / 100.0)
+st.sidebar.info(f"💵 Batas Toleransi Risiko: **${risk_amount:,.2f}**")
 
+
+# -----------------------------------------------------------------------------
+# DATA FETCHING & RESAMPLING
+# -----------------------------------------------------------------------------
 @st.cache_data(ttl=60)
 def fetch_tf_data(interval, period):
-  # Mapping interval ke max period yang diizinkan Yahoo Finance agar tidak kosong/error
   safe_periods = {
-      "1m": "5d",  # 1m max 7 hari di yfinance
+      "1m": "5d",
       "5m": "30d",
       "15m": "60d",
       "1h": "730d",
       "1d": "max",
   }
-  # Gunakan period aman jika period yang diminta terlalu besar untuk interval kecil
   actual_period = period
   if interval in ["1m", "5m"] and period in ["60d", "14d"]:
     actual_period = safe_periods.get(interval, "5d")
@@ -44,7 +63,6 @@ def fetch_tf_data(interval, period):
           clean_df["Low"] = df["Low"].iloc[:, 0]
           clean_df["Close"] = df["Close"].iloc[:, 0]
           df = clean_df
-        # Pastikan tidak ada NaN di kolom utama
         df = df.dropna(subset=["Open", "High", "Low", "Close"])
         if not df.empty:
           return df
@@ -65,12 +83,50 @@ def resample_to_h4(df_h1):
   return df_h4.dropna()
 
 
+# -----------------------------------------------------------------------------
+# BBMA OMA ALLY ANALYSIS LOGIC WITH HISTORICAL TRIGGER CHECK
+# -----------------------------------------------------------------------------
+def check_historical_trigger(df):
+  """Mendeteksi apakah ada riwayat CSAK atau Momentum dalam 5 candle terakhir
+
+  sebagai syarat sah sebuah Re-Entry dalam metode BBMA Oma Ally.
+  """
+  if len(df) < 10:
+    return "Data Terlalu Singkat"
+
+  for i in range(1, 6):
+    row = df.iloc[-i]
+    prev_row = df.iloc[-(i + 1)]
+
+    # Deteksi Momentum (Close/High/Low menembus luar Bollinger Bands)
+    if row["Close"] >= row["TopBB"] or row["High"] >= row["TopBB"]:
+      return "Valid (Didasari Momentum Sell)"
+    if row["Close"] <= row["BottomBB"] or row["Low"] <= row["BottomBB"]:
+      return "Valid (Didasari Momentum Buy)"
+
+    # Deteksi CSAK (Candle Direction Sudirman/Kukuh yang memotong Mid BB)
+    body_size = abs(row["Close"] - row["Open"])
+    avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
+
+    if body_size > (avg_body * 1.2):
+      if row["Close"] > row["MidBB"] and prev_row["Close"] <= prev_row[
+          "MidBB"
+      ]:
+        return "Valid (Didasari CSAK Buy)"
+      if row["Close"] < row["MidBB"] and prev_row["Close"] >= prev_row[
+          "MidBB"
+      ]:
+        return "Valid (Didasari CSAK Sell)"
+
+  return "Peringatan: Tanpa Trigger Baku (Hati-hati Re-Entry Lemah)"
+
+
 def analyze_bbma_tf(df, is_tf1=False):
   if df.empty or len(df) < 20:
     return {
         "price": 0.0,
         "status": "-",
-        "bias": "-",
+        "bias": "NEUTRAL",
         "top_bb": 0.0,
         "bot_bb": 0.0,
         "mid_bb": 0.0,
@@ -92,7 +148,7 @@ def analyze_bbma_tf(df, is_tf1=False):
     return {
         "price": 0.0,
         "status": "-",
-        "bias": "-",
+        "bias": "NEUTRAL",
         "top_bb": 0.0,
         "bot_bb": 0.0,
         "mid_bb": 0.0,
@@ -115,54 +171,54 @@ def analyze_bbma_tf(df, is_tf1=False):
 
   status = "-"
   bias = "NEUTRAL"
-  detail = "-"
 
-  # JIKA TF1: HANYA FOKUS PADA RE-ENTRY SEBAGAI ACUAN TREN UTAMA
+  # Cek Validasi Historis Trigger (CSAK / Momentum)
+  trigger_status = check_historical_trigger(df)
+
   if is_tf1:
-    if c_price >= ma5_h and c_price > mid_bb:
-      status = "RE-ENTRY SELL (TF1 Tren)"
-      bias = "SELL"
-      detail = "TF1 valid Re-Entry Sell di atas Mid BB (Area MA5/10 High)"
-    elif c_price <= ma5_l and c_price < mid_bb:
-      status = "RE-ENTRY BUY (TF1 Tren)"
+    if (c_price <= ma5_h) and (c_price >= mid_bb or low >= mid_bb):
+      status = "VALID RE-ENTRY BUY (TF1 Tren)"
       bias = "BUY"
-      detail = "TF1 valid Re-Entry Buy di bawah Mid BB (Area MA5/10 Low)"
+      detail = f"Zona MA5/10 Low - Mid BB. {trigger_status}"
+    elif (c_price >= ma5_l) and (c_price <= mid_bb or high <= mid_bb):
+      status = "VALID RE-ENTRY SELL (TF1 Tren)"
+      bias = "SELL"
+      detail = f"Zona MA5/10 High - Mid BB. {trigger_status}"
     elif c_price > mid_bb:
-      status = "BULLISH BIAS (Menuju Top BB)"
+      status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
       bias = "BUY"
-      detail = "Harga di atas Mid BB, menunggu pullback ke area Re-Entry Buy"
+      detail = f"Harga di atas Mid BB. {trigger_status}"
     else:
-      status = "BEARISH BIAS (Menuju Bottom BB)"
+      status = "BEARISH BIAS (Menunggu Re-Entry Sell)"
       bias = "SELL"
-      detail = "Harga di bawah Mid BB, menunggu pullback ke area Re-Entry Sell"
+      detail = f"Harga di bawah Mid BB. {trigger_status}"
   else:
-    # UNTUK TF2 & TF3: DETEKSI MOMENTUM, EXTREME, MHV, CSAK, DAN RE-ENTRY
     if c_price >= top_bb or (high >= top_bb and prev["High"] >= prev["TopBB"]):
       status = "MOMENTUM / EXTREME SELL"
       bias = "SELL"
-      detail = "Terbentuk Momentum / Extreme di Top BB (Valid Sell)"
+      detail = f"Terbentuk Extreme/Momentum di Top BB. {trigger_status}"
     elif c_price <= bot_bb or (
         low <= bot_bb and prev["Low"] <= prev["BottomBB"]
     ):
       status = "MOMENTUM / EXTREME BUY"
       bias = "BUY"
-      detail = "Terbentuk Momentum / Extreme di Bottom BB (Valid Buy)"
+      detail = f"Terbentuk Extreme/Momentum di Bottom BB. {trigger_status}"
     elif c_price >= ma5_h and c_price > mid_bb:
       status = "RE-ENTRY / CSAK SELL"
       bias = "SELL"
-      detail = "Konfirmasi area Re-Entry Sell / CSAK Sell"
+      detail = f"Area Re-Entry/CSAK Sell. {trigger_status}"
     elif c_price <= ma5_l and c_price < mid_bb:
       status = "RE-ENTRY / CSAK BUY"
       bias = "BUY"
-      detail = "Konfirmasi area Re-Entry Buy / CSAK Buy"
+      detail = f"Area Re-Entry/CSAK Buy. {trigger_status}"
     elif c_price > mid_bb:
       status = "BULLISH CONTINUATION"
       bias = "BUY"
-      detail = "Struktur harga mendukung kelanjutan naik"
+      detail = f"Struktur Bullish Berkelanjutan. {trigger_status}"
     else:
       status = "BEARISH CONTINUATION"
       bias = "SELL"
-      detail = "Struktur harga mendukung kelanjutan turun"
+      detail = f"Struktur Bearish Berkelanjutan. {trigger_status}"
 
   return {
       "price": c_price,
@@ -177,7 +233,9 @@ def analyze_bbma_tf(df, is_tf1=False):
   }
 
 
-# Fetch Data Dasar dengan penanganan interval yang aman
+# -----------------------------------------------------------------------------
+# FETCH DATA FEED
+# -----------------------------------------------------------------------------
 with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
   df_1d = fetch_tf_data("1d", "60d")
   df_1h = fetch_tf_data("1h", "14d")
@@ -208,7 +266,12 @@ tf_labels = {
 }
 
 
-def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
+# -----------------------------------------------------------------------------
+# TRADE LEVELS & RISK MANAGEMENT CALCULATOR
+# -----------------------------------------------------------------------------
+def calculate_trade_levels(
+    bias, current_price, top_bb, mid_bb, bot_bb, account_risk
+):
   if bias == "BUY":
     entry = current_price
     sl = round(bot_bb - 3.0, 2)
@@ -216,9 +279,12 @@ def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
     tp2 = round(top_bb - 4.0, 2)
     tp3 = round(top_bb, 2)
 
-    risk = entry - sl
-    reward = tp1 - entry
-    rrr = round(reward / risk, 2) if risk > 0 else 0.0
+    risk_pips = round((entry - sl) * 10, 1)
+    reward_pips = round((tp1 - entry) * 10, 1)
+    rrr = round(reward_pips / risk_pips, 2) if risk_pips > 0 else 0.0
+    lot_size = (
+        round(account_risk / (risk_pips * 10), 2) if risk_pips > 0 else 0.0
+    )
 
   elif bias == "SELL":
     entry = current_price
@@ -227,13 +293,25 @@ def calculate_trade_levels(bias, current_price, top_bb, mid_bb, bot_bb):
     tp2 = round(bot_bb + 4.0, 2)
     tp3 = round(bot_bb, 2)
 
-    risk = sl - entry
-    reward = entry - tp1
-    rrr = round(reward / risk, 2) if risk > 0 else 0.0
+    risk_pips = round((sl - entry) * 10, 1)
+    reward_pips = round((entry - tp1) * 10, 1)
+    rrr = round(reward_pips / risk_pips, 2) if risk_pips > 0 else 0.0
+    lot_size = (
+        round(account_risk / (risk_pips * 10), 2) if risk_pips > 0 else 0.0
+    )
   else:
-    entry, sl, tp1, tp2, tp3, rrr = 0, 0, 0, 0, 0, 0.0
+    entry, sl, tp1, tp2, tp3, rrr, risk_pips, lot_size = (
+        0,
+        0,
+        0,
+        0,
+        0,
+        0.0,
+        0.0,
+        0.0,
+    )
 
-  return entry, sl, tp1, tp2, tp3, rrr
+  return entry, sl, tp1, tp2, tp3, rrr, risk_pips, max(lot_size, 0.01)
 
 
 def evaluate_combo(tf1_code, tf2_code, tf3_code):
@@ -243,82 +321,67 @@ def evaluate_combo(tf1_code, tf2_code, tf3_code):
   d3 = current_tf_data[tf3_code]
 
   valid_signal = "-"
-  syarat_tf2 = "-"
-  syarat_tf3 = "-"
   kesimpulan = "-"
   dominant_bias = d1["bias"]
 
   if "BUY" in dominant_bias:
-    syarat_tf2 = (
-        "Validasi TF2: Wajib Momentum/Extreme Buy, MHV, atau Re-Entry Buy valid"
-    )
-    syarat_tf3 = "Validasi TF3: Wajib CSAK Buy / Momentum / Re-Entry Eksekusi"
-
     if "BUY" in d2["bias"] and "BUY" in d3["bias"]:
       valid_signal = "VALID SETUP BBMA (BUY)"
       kesimpulan = (
-          f"✅ Alignment Sempurna! {tf_labels[tf1_code]} memberi acuan Re-Entry"
-          f" Buy, divalidasi oleh {tf_labels[tf2_code]} & {tf_labels[tf3_code]}."
+          f"✅ **Alignment Sempurna!** {tf_labels[tf1_code]} acuan Re-Entry Buy,"
+          f" divalidasi penuh oleh {tf_labels[tf2_code]} &"
+          f" {tf_labels[tf3_code]}."
       )
     elif "BUY" in d2["bias"]:
       valid_signal = "MENUNGGU KONFIRMASI TF3"
       kesimpulan = (
           f"⏳ {tf_labels[tf1_code]} & {tf_labels[tf2_code]} searah Buy. Tunggu"
-          f" trigger konfirmasi di {tf_labels[tf3_code]}."
+          f" konfirmasi trigger di {tf_labels[tf3_code]}."
       )
     else:
-      valid_signal = "-"
+      valid_signal = "TIDAK VALID"
       kesimpulan = (
-          f"❌ Belum Valid. {tf_labels[tf2_code]} belum mengonfirmasi arah"
+          f"❌ **Belum Valid.** {tf_labels[tf2_code]} belum mengonfirmasi arah"
           " Buy."
       )
 
   elif "SELL" in dominant_bias:
-    syarat_tf2 = (
-        "Validasi TF2: Wajib Momentum/Extreme Sell, MHV, atau Re-Entry Sell valid"
-    )
-    syarat_tf3 = "Validasi TF3: Wajib CSAK Sell / Momentum / Re-Entry Eksekusi"
-
     if "SELL" in d2["bias"] and "SELL" in d3["bias"]:
       valid_signal = "VALID SETUP BBMA (SELL)"
       kesimpulan = (
-          f"✅ Alignment Sempurna! {tf_labels[tf1_code]} memberi acuan Re-Entry"
-          f" Sell, divalidasi oleh {tf_labels[tf2_code]} & {tf_labels[tf3_code]}."
+          f"✅ **Alignment Sempurna!** {tf_labels[tf1_code]} acuan Re-Entry"
+          f" Sell, divalidasi penuh oleh {tf_labels[tf2_code]} &"
+          f" {tf_labels[tf3_code]}."
       )
     elif "SELL" in d2["bias"]:
       valid_signal = "MENUNGGU KONFIRMASI TF3"
       kesimpulan = (
           f"⏳ {tf_labels[tf1_code]} & {tf_labels[tf2_code]} searah Sell. Tunggu"
-          f" trigger konfirmasi di {tf_labels[tf3_code]}."
+          f" konfirmasi trigger di {tf_labels[tf3_code]}."
       )
     else:
-      valid_signal = "-"
+      valid_signal = "TIDAK VALID"
       kesimpulan = (
-          f"❌ Belum Valid. {tf_labels[tf2_code]} belum mengonfirmasi arah"
+          f"❌ **Belum Valid.** {tf_labels[tf2_code]} belum mengonfirmasi arah"
           " Sell."
       )
 
   return {
       "valid_signal": valid_signal,
       "dominant_bias": dominant_bias,
-      "tf1_act": d1["status"],
-      "tf1_detail": d1["detail"],
-      "tf2_act": d2["status"],
-      "tf2_req": syarat_tf2,
-      "tf3_act": d3["status"],
-      "tf3_req": syarat_tf3,
       "kesimpulan": kesimpulan,
       "tf_data_dict": current_tf_data,
   }
 
 
+# -----------------------------------------------------------------------------
+# MAIN INTERFACE DISPLAY
+# -----------------------------------------------------------------------------
 live_price = df_1h["Close"].iloc[-1] if not df_1h.empty else 0.0
-st.metric("Live XAUUSD Price", f"${live_price:,.2f}")
+st.metric("Harga Live XAUUSD", f"${live_price:,.2f}")
 
 st.markdown("---")
-st.subheader(
-    "🎯 Deteksi Validitas Re-Entry, Validasi TF2/TF3 & Manajemen Risiko"
-)
+st.subheader("🎯 Matriks Hirarki BBMA & Kalkulator Ukuran Lot")
 
 tab1, tab2, tab3, tab4 = st.tabs([
     "D1 ➔ H4 ➔ H1",
@@ -332,27 +395,34 @@ def render_tab_content(tf1, tf2, tf3):
   eval_res = evaluate_combo(tf1, tf2, tf3)
   current_tf_data = eval_res["tf_data_dict"]
   d_exec = current_tf_data[tf3]
-
   execution_bias = eval_res["dominant_bias"]
 
-  entry, sl, tp1, tp2, tp3, rrr = calculate_trade_levels(
+  entry, sl, tp1, tp2, tp3, rrr, risk_pips, lot_size = calculate_trade_levels(
       execution_bias,
       d_exec["price"],
       d_exec["top_bb"],
       d_exec["mid_bb"],
       d_exec["bot_bb"],
+      risk_amount,
   )
 
-  col1, col2, col3 = st.columns(3)
-  col1.metric("Status Signal", eval_res["valid_signal"])
+  col1, col2, col3, col4 = st.columns(4)
+  col1.metric("Status Sinyal Setup", eval_res["valid_signal"])
   col2.metric(
-      "Risk-to-Reward Ratio (RRR)", f"1 : {rrr}" if rrr > 0 else "-"
+      "Risk-to-Reward (RRR)", f"1 : {rrr}" if rrr > 0 else "-"
   )
-  col3.metric("Arah Bias Acuan (TF1)", execution_bias)
+  col3.metric("Rekomendasi Lot", f"{lot_size} Lot" if lot_size > 0 else "-")
+  col4.metric("Bias Acuan Tren (TF1)", execution_bias)
 
-  st.info(eval_res["kesimpulan"])
+  if "VALID SETUP" in eval_res["valid_signal"]:
+    st.success(eval_res["kesimpulan"])
+  elif "MENUNGGU" in eval_res["valid_signal"]:
+    st.warning(eval_res["kesimpulan"])
+  else:
+    st.error(eval_res["kesimpulan"])
 
-  st.markdown("#### 📌 Matriks Status Timeframe Hirarki Ini")
+  # TABEL MATRIKS TIMEFRAME
+  st.markdown("#### 📌 Matriks Kondisi Indikator Hirarki & Validasi Trigger")
   matrix_rows = []
   for code in [tf1, tf2, tf3]:
     res = current_tf_data[code]
@@ -370,37 +440,47 @@ def render_tab_content(tf1, tf2, tf3):
         "Status / Kondisi": res["status"],
         "Arah Bias": res["bias"],
         "Top BB": f"${res['top_bb']:,.2f}" if res["top_bb"] > 0 else "-",
-        "Mid BB": f"${res['mid_bb']:,.2f}" if res["mid_bb"] > 0 else "-",
+        "Mid BB (MA20)": f"${res['mid_bb']:,.2f}" if res["mid_bb"] > 0 else "-",
         "Bottom BB": f"${res['bot_bb']:,.2f}" if res["bot_bb"] > 0 else "-",
-        "Keterangan": res["detail"],
+        "Keterangan & Riwayat Trigger": res["detail"],
     })
   st.dataframe(pd.DataFrame(matrix_rows), use_container_width=True)
 
+  # TABEL KALKULATOR RENCANA PERDAGANGAN
   icon_label = "🟢" if execution_bias == "BUY" else "🔴"
   st.markdown(
-      f"#### 📋 Kalkulator Manajemen Risiko & Target Harga ({icon_label}"
+      f"#### 📋 Rencana Eksekusi Trade & Manajemen Risiko ({icon_label}"
       f" {execution_bias})"
   )
+
   trade_table = pd.DataFrame([
       {
-          "Parameter": "Zona Harga Entry (TF3)",
-          "Nilai": f"${entry:,.2f}" if entry > 0 else "-",
+          "Parameter": "Harga Entry Saat Ini (TF3)",
+          "Nilai Level Harga": f"${entry:,.2f}" if entry > 0 else "-",
       },
       {
           "Parameter": "Stop Loss (SL)",
-          "Nilai": f"${sl:,.2f}" if sl > 0 else "-",
+          "Nilai Level Harga": f"${sl:,.2f}" if sl > 0 else "-",
       },
       {
-          "Parameter": "Take Profit 1 (TP1 - Mid BB)",
-          "Nilai": f"${tp1:,.2f}" if tp1 > 0 else "-",
+          "Parameter": "Jarak Risiko (Pips / Points)",
+          "Nilai Level Harga": (
+              f"{risk_pips} Pips ({risk_pips*10:.0f} Points)"
+              if risk_pips > 0
+              else "-"
+          ),
       },
       {
-          "Parameter": "Take Profit 2 (TP2)",
-          "Nilai": f"${tp2:,.2f}" if tp2 > 0 else "-",
+          "Parameter": "Take Profit 1 (Mid BB)",
+          "Nilai Level Harga": f"${tp1:,.2f}" if tp1 > 0 else "-",
       },
       {
-          "Parameter": "Take Profit 3 (TP3 - Extreme BB)",
-          "Nilai": f"${tp3:,.2f}" if tp3 > 0 else "-",
+          "Parameter": "Take Profit 2 (Buffer Area)",
+          "Nilai Level Harga": f"${tp2:,.2f}" if tp2 > 0 else "-",
+      },
+      {
+          "Parameter": "Take Profit 3 (Extreme BB)",
+          "Nilai Level Harga": f"${tp3:,.2f}" if tp3 > 0 else "-",
       },
   ])
   st.dataframe(trade_table, use_container_width=True)
