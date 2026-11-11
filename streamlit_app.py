@@ -104,18 +104,15 @@ def check_historical_trigger(df):
     if row["Close"] <= row["BottomBB"] or row["Low"] <= row["BottomBB"]:
       return "Valid (Didasari Momentum Buy)"
 
-    # Deteksi CSAK (Candle Direction Sudirman/Kukuh yang memotong Mid BB)
+    # Deteksi CSAK (Candle Direction Sudirman/Kukuh yang memotong MA20)
     body_size = abs(row["Close"] - row["Open"])
     avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
     if body_size > (avg_body * 1.2):
-      if row["Close"] > row["MidBB"] and prev_row["Close"] <= prev_row[
-          "MidBB"
-      ]:
+      # PERBAIKAN: Menggunakan "MA20" sesuai nama kolom dataframe
+      if row["Close"] > row["MA20"] and prev_row["Close"] <= prev_row["MA20"]:
         return "Valid (Didasari CSAK Buy)"
-      if row["Close"] < row["MidBB"] and prev_row["Close"] >= prev_row[
-          "MidBB"
-      ]:
+      if row["Close"] < row["MA20"] and prev_row["Close"] >= prev_row["MA20"]:
         return "Valid (Didasari CSAK Sell)"
 
   return "Peringatan: Tanpa Trigger Baku (Hati-hati Re-Entry Lemah)"
