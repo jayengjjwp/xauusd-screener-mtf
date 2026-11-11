@@ -16,8 +16,8 @@ st.title(
 )
 st.markdown(
     f"📅 **Waktu Akses:** {datetime.now().strftime('%A, %d %B %Y - %H:%M')} WIB | "
-    "Sistem validasi hierarki ketat: **TF1 (Re-Entry MA 5/10) ➔ TF2 (Konfirmasi)"
-    " ➔ TF3 (Eksekusi)** khusus pasangan **XAUUSD**."
+    "Sistem validasi hierarki ketat dua arah: **TF1 (Acuan Re-Entry MA 5/10) ➔"
+    " TF2 (Konfirmasi) ➔ TF3 (Eksekusi)** khusus pasangan **XAUUSD**[cite: 3]."
 )
 
 
@@ -151,7 +151,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
   bias = "NEUTRAL"
   detail = "-"
 
-  # Komponen Deteksi
+  # Komponen Deteksi Seksional
   reject_bot_bb = low <= bot_bb and c_price > bot_bb
   reject_top_bb = high >= top_bb and c_price < top_bb
   reject_ema50_buy = low <= ema50 and c_price > ema50
@@ -177,12 +177,12 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
   csak_buy = (
       c_price > mid_bb
       and prev["Close"] <= mid_bb
-      and body_size >= (avg_body * 1.1)
+      and body_size >= (avg_body * 1.05)
   )
   csak_sell = (
       c_price < mid_bb
       and prev["Close"] >= mid_bb
-      and body_size >= (avg_body * 1.1)
+      and body_size >= (avg_body * 1.05)
   )
 
   # ==========================================
@@ -190,7 +190,8 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
   # ==========================================
   if role_type == "TF1":
     if target_bias == "BUY":
-      if c_price <= ma5_h and low <= ma10_l * 1.01:
+      # Re-Entry Buy berpatokan ketat di area MA 5/10 Low
+      if c_price <= ma5_h and low <= ma10_l * 1.015:
         status = "RE-ENTRY BUY VALID (MA 5/10 Low)"
         bias = "BUY"
         detail = "Harga pullback dan tertahan akurat di area MA 5/10 Low."
@@ -203,7 +204,8 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
         bias = "SELL"
         detail = "Belum memenuhi syarat Re-Entry Buy."
     else:
-      if c_price >= ma5_l and high >= ma10_h * 0.99:
+      # Re-Entry Sell berpatokan ketat di area MA 5/10 High
+      if c_price >= ma5_l and high >= ma10_h * 0.985:
         status = "RE-ENTRY SELL VALID (MA 5/10 High)"
         bias = "SELL"
         detail = "Harga koreksi naik dan tertahan akurat di area MA 5/10 High."
@@ -225,7 +227,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
           extreme_buy
           or reject_bot_bb
           or reject_ema50_buy
-          or (c_price <= ma5_h and low <= ma10_l * 1.01)
+          or (c_price <= ma5_h and low <= ma10_l * 1.015)
       ):
         status = "TF2 KONFIRMASI BUY (Valid Extreme/Reject/Re-Entry)"
         bias = "BUY"
@@ -243,7 +245,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
           extreme_sell
           or reject_top_bb
           or reject_ema50_sell
-          or (c_price >= ma5_l and high >= ma10_h * 0.99)
+          or (c_price >= ma5_l and high >= ma10_h * 0.985)
       ):
         status = "TF2 KONFIRMASI SELL (Valid Extreme/Reject/Re-Entry)"
         bias = "SELL"
@@ -266,7 +268,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
         status = "TRIGGER MOMENTUM BUY"
         bias = "BUY"
         detail = "TF3 membentuk Momentum Buy sebagai pelatuk."
-      elif csak_buy:
+      elif jika_csak_buy := csak_buy:
         status = "TRIGGER CSAK BUY"
         bias = "BUY"
         detail = "TF3 membentuk CSAK Buy."
@@ -287,7 +289,7 @@ def analyze_bbma_tf(df, role_type="TF1", target_bias="BUY"):
         status = "TRIGGER MOMENTUM SELL"
         bias = "SELL"
         detail = "TF3 membentuk Momentum Sell sebagai pelatuk."
-      elif csak_sell:
+      elif jika_csak_sell := csak_sell:
         status = "TRIGGER CSAK SELL"
         bias = "SELL"
         detail = "TF3 membentuk CSAK Sell."
