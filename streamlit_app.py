@@ -115,7 +115,7 @@ def resample_to_h4(df_h1):
 
 
 def analyze_bbma_tf_auto(df, role_type="TF1"):
-  """Analisis murni metodologi BBMA Oma Ally secara independen per timeframe"""
+  """Analisis murni metodologi BBMA Oma Ally dengan pelacakan struktur CSAK & Momentum"""
   if df.empty or len(df) < 55:
     return {
         "price": 0.0,
@@ -141,7 +141,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   high = float(latest["High"])
   low = float(latest["Low"])
 
-  recent_df = df.tail(6)
+  recent_df = df.tail(8)
   avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
   # Deteksi Momentum Murni (Close menembus Top/Bottom BB)
@@ -153,7 +153,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   csak_sell = False
   last_csak_type = "NONE"
 
-  for i in range(len(df) - 5, len(df)):
+  for i in range(len(df) - 6, len(df)):
     if i > 0:
       curr_c = df.iloc[i]
       prev_c = df.iloc[i - 1]
@@ -161,72 +161,80 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if (
           float(curr_c["Close"]) > float(curr_c["MA20"])
           and float(prev_c["Close"]) <= float(prev_c["MA20"])
-          and b_sz >= (avg_body * 0.75)
+          and b_sz >= (avg_body * 0.70)
       ):
         csak_buy = True
         last_csak_type = "BUY"
       if (
           float(curr_c["Close"]) < float(curr_c["MA20"])
           and float(prev_c["Close"]) >= float(prev_c["MA20"])
-          and b_sz >= (avg_body * 0.75)
+          and b_sz >= (avg_body * 0.70)
       ):
         csak_sell = True
         last_csak_type = "SELL"
 
-  # Deteksi Re-Entry secara spesifik
-  is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
-  is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
-
-  # Penentuan Structural Bias secara objektif berdasarkan kondisi riil harga
+  # Pelacakan Bias Berdasarkan Struktur Induk (Momentum / CSAK)
   structural_bias = "NEUTRAL"
-  if is_re_buy or low <= bot_bb * 1.03 or momentum_buy or last_csak_type == "BUY":
-    structural_bias = "BUY"
-  elif (
-      is_re_sell or high >= top_bb * 0.97 or momentum_sell or last_csak_type == "SELL"
-  ):
+  if momentum_sell or last_csak_type == "SELL":
     structural_bias = "SELL"
+  elif momentum_buy or last_csak_type == "BUY":
+    structural_bias = "BUY"
   else:
+    # Fallback jika belum ada CSAK/Momentum baru, lihat posisi terhadap Mid BB
     structural_bias = "BUY" if c_price >= mid_bb else "SELL"
 
   status = "-"
   bias = structural_bias
   detail = "-"
 
+  # Validasi Re-Entry spesifik
+  is_re_buy = low <= ma10_l * 1.025 and c_price >= bot_bb
+  is_re_sell = high >= ma10_h * 0.975 and c_price <= top_bb
+
   if role_type == "TF1":
     if structural_bias == "BUY":
       if is_re_buy or (c_price <= ma5_h):
         status = "RE-ENTRY BUY VALID (MA 5/10 Low)"
-        detail = "Harga pullback akurat di area MA 5/10 Low searah tren Buy."
+        detail = (
+            "Didahului struktur Buy, harga pullback akurat di area MA 5/10 Low."
+        )
       else:
         status = "BULLISH BIAS (Menunggu Re-Entry Buy)"
-        detail = "Struktur Buy valid, menunggu koreksi sempurna ke MA 5/10 Low."
+        detail = "Struktur Buy aktif, menunggu koreksi ke MA 5/10 Low."
     else:
       if is_re_sell or (c_price >= ma5_l):
         status = "RE-ENTRY SELL VALID (MA 5/10 High)"
-        detail = "Harga koreksi naik akurat di area MA 5/10 High searah Sell."
+        detail = (
+            "Didahului struktur Sell, harga koreksi naik akurat di area MA 5/10"
+            " High."
+        )
       else:
         status = "BEARISH BIAS (Menunggu Re-Entry Sell)"
-        detail = "Struktur Sell valid, menunggu pantulan ke MA 5/10 High."
+        detail = "Struktur Sell aktif, menunggu pantulan ke MA 5/10 High."
 
   elif role_type == "TF2":
     if structural_bias == "BUY":
       if momentum_buy or low <= bot_bb or c_price >= mid_bb:
         status = "TF2 KONFIRMASI BUY (Valid Struktur)"
-        detail = "TF2 mengonfirmasi kenaikan."
+        detail = "TF2 mengonfirmasi kenaikan searah struktur."
       else:
         status = "TF2 BULLISH SEARAH"
         detail = "Struktur TF2 mendukung kenaikan."
     else:
       if momentum_sell or high >= top_bb or c_price < mid_bb:
         status = "TF2 KONFIRMASI SELL (Valid Struktur)"
-        detail = "TF2 mengonfirmasi penurunan."
+        detail = "TF2 mengonfirmasi penurunan searah struktur."
       else:
         status = "TF2 BEARISH SEARAH"
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
-    jika_csak_buy = termasuk_buy = saja_b = csak_buy
-    jika_csak_sell = termasuk_sell = saja_s = csak_sell
+    jika_csak_buy = termasuk_buy = saja_b = termasuk_buy_flag = saja_b_flag = (
+        csak_buy
+    )
+    jika_csak_sell = termasuk_sell = saja_s = termasuk_sell_flag = saja_s_flag = (
+        csak_sell
+    )
 
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
