@@ -244,7 +244,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif seperti_csak_s := seperti_csak_s_val := csak_sell:
+      elif seperti_csak_s := csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
