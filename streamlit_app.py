@@ -244,7 +244,7 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
       if momentum_sell or c_price >= top_bb:
         status = "TRIGGER MOMENTUM / EXTREME SELL"
         detail = "TF3 membentuk Momentum atau Extreme Sell."
-      elif cuk_sell := seperti_csak_s := csak_sell:
+      elif seperti_csak_s := csak_sell:
         status = "TRIGGER CSAK SELL"
         detail = "TF3 memicu CSAK Sell."
       else:
@@ -477,7 +477,9 @@ def render_tab_content(tf1, tf2, tf3):
       },
       {
           "Parameter": "Take Profit 3 (Extreme BB)",
-          "Nilai Level Harga": f"${tp3:,.2f}" if tp3 > 0 else "-",
+          "Nilai Level Harga": (
+              f"${tp3:,.2f}" if (tp3 is not None and tp3 > 0) else "-"
+          ),
       },
   ])
   st.dataframe(trade_table, use_container_width=True)
