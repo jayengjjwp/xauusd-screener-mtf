@@ -144,11 +144,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   recent_df = df.tail(8)
   avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
-  # 1. Deteksi Momentum Murni (Close menembus Top/Bottom BB)
+  # 1. Deteksi Momentum Murni (Close menembus Top/Bottom BB)[cite: 3]
   momentum_buy = any(recent_df["Close"] <= recent_df["BottomBB"])
   momentum_sell = any(recent_df["Close"] >= recent_df["TopBB"])
 
-  # 2. Deteksi CSAK Murni (Close melewati Mid BB & MA 5/10)
+  # 2. Deteksi CSAK Murni (Close melewati Mid BB & MA 5/10)[cite: 3]
   csak_buy = False
   csak_sell = False
   for i in range(len(df) - 6, len(df)):
@@ -173,11 +173,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   is_re_buy = (low <= ma10_l * 1.025) and (c_price >= bot_bb)
   is_re_sell = (high >= ma10_h * 0.975) and (c_price <= top_bb)
 
-  # 4. Penentuan Struktur & Netralisasi jika tidak ada setup jelas (menggunakan 'csak_buy' dan 'csak_sell')
+  # 4. Penentuan Struktur & Netralisasi (100% menggunakan csak_buy dan csak_sell)
   structural_bias = "NEUTRAL"
-  if momentum_buy or cask_buy or (c_price > mid_bb and is_re_buy):  # Diperbaiki menjadi csak_buy
+  if momentum_buy or csak_buy or (c_price > mid_bb and is_re_buy):
     structural_bias = "BUY"
-  elif momentum_sell or cask_sell or (c_price < mid_bb and is_re_sell):  # Diperbaiki menjadi csak_sell
+  elif momentum_sell or csak_sell or (c_price < mid_bb and is_re_sell):
     structural_bias = "SELL"
   else:
     structural_bias = "NEUTRAL"
@@ -220,20 +220,20 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
     if structural_bias == "BUY":
       if momentum_buy:
         status = "TRIGGER MOMENTUM BUY"
-        detail = "TF3 membentuk Momentum Buy di Bottom BB."
-      elif cask_buy:  # Menggunakan csak_buy
+        detail = "TF3 membentuk Momentum Buy di Bottom BB."[cite: 3]
+      elif csak_buy:
         status = "TRIGGER CSAK BUY"
-        detail = "TF3 memicu CSAK Buy menembus Mid BB."
+        detail = "TF3 memicu CSAK Buy menembus Mid BB."[cite: 3]
       else:
         status = "TRIGGER RE-ENTRY BUY"
         detail = "TF3 siap eksekusi Re-Entry Buy."
     elif structural_bias == "SELL":
       if momentum_sell:
         status = "TRIGGER MOMENTUM SELL"
-        detail = "TF3 membentuk Momentum Sell di Top BB."
-      elif cask_sell:  # Menggunakan csak_sell
+        detail = "TF3 membentuk Momentum Sell di Top BB."[cite: 3]
+      elif csak_sell:
         status = "TRIGGER CSAK SELL"
-        detail = "TF3 memicu CSAK Sell menembus Mid BB."
+        detail = "TF3 memicu CSAK Sell menembus Mid BB."[cite: 3]
       else:
         status = "TRIGGER RE-ENTRY SELL"
         detail = "TF3 siap eksekusi Re-Entry Sell."
