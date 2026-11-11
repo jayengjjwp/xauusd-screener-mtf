@@ -36,7 +36,7 @@ st.sidebar.info(f"💵 Batas Toleransi Risiko: **${risk_amount:,.2f}**")
 
 
 # -----------------------------------------------------------------------------
-# DATA FETCHING & RESAMPLING
+# DATA FETCHING & RESAMPLING (PERPANJANG PERIODE D1 AGAR EMA 50 AMAN)
 # -----------------------------------------------------------------------------
 @st.cache_data(ttl=60)
 def fetch_tf_data(interval, period):
@@ -45,9 +45,9 @@ def fetch_tf_data(interval, period):
       "5m": "30d",
       "15m": "60d",
       "1h": "730d",
-      "1d": "max",
+      "1d": "1y",  # Diperpanjang ke 1 tahun agar data EMA 50 tidak kurang dari 55 baris
   }
-  actual_period = period
+  actual_period = safe_periods.get(interval, period)
   if interval in ["1m", "5m"] and period in ["60d", "14d"]:
     actual_period = safe_periods.get(interval, "5d")
 
@@ -92,22 +92,24 @@ def analyze_bbma_tf(df, role_type="TF1"):
   if df.empty or len(df) < 55:
     return {
         "price": 0.0,
-        "status": "-",
+        "status": "DATA KURANG",
         "bias": "NEUTRAL",
         "top_bb": 0.0,
         "bot_bb": 0.0,
         "mid_bb": 0.0,
         "ema50": 0.0,
-        "detail": "Data tidak mencukupi untuk indikator lengkap",
+        "detail": (
+            f"Data baris hanya {len(df)}, butuh min. 55 untuk kalkulasi EMA 50"
+        ),
     }
 
   df = df.copy()
-  # Indikator BBMA & EMA 50
   df["MA20"] = df["Close"].rolling(window=20).mean()
   df["STD"] = df["Close"].rolling(window=20).std()
   df["TopBB"] = df["MA20"] + (df["STD"] * 2)
   df["BottomBB"] = df["MA20"] - (df["STD"] * 2)
   df["MA5_High"] = df["High"].rolling(window=5).mean()
+  df["MA5_Low"] = df["High"].rolling(window=5).mean()  # Diperbaiki ke High/Low
   df["MA5_Low"] = df["Low"].rolling(window=5).mean()
   df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
 
@@ -115,13 +117,13 @@ def analyze_bbma_tf(df, role_type="TF1"):
   if df.empty or len(df) < 2:
     return {
         "price": 0.0,
-        "status": "-",
+        "status": "KOSONG",
         "bias": "NEUTRAL",
         "top_bb": 0.0,
         "bot_bb": 0.0,
         "mid_bb": 0.0,
         "ema50": 0.0,
-        "detail": "Data kosong setelah kalkulasi",
+        "detail": "Data kosong setelah kalkulasi indikator",
     }
 
   latest = df.iloc[-1]
@@ -171,7 +173,6 @@ def analyze_bbma_tf(df, role_type="TF1"):
 
   # LOGIKA BERDASARKAN PERAN TIMEFRAME (TF1, TF2, atau TF3)
   if role_type == "TF1":
-    # TF1: Wajib Mencari Re-Entry Tren Utama
     if (c_price <= ma5_h) and (c_price >= mid_bb or low >= mid_bb):
       status = "RE-ENTRY BUY (Acuan Tren)"
       bias = "BUY"
@@ -196,7 +197,6 @@ def analyze_bbma_tf(df, role_type="TF1"):
       detail = "Harga di bawah Mid BB, menunggu pullback sehat ke zona Sell"
 
   elif role_type == "TF2":
-    # TF2: Konfirmasi (Extreme / CSAK / Momentum / Reject BB / Reject EMA 50)
     if momentum_buy or reject_bot_bb or reject_ema50_buy or c_price <= bot_bb:
       status = "KONFIRMASI BUY (Valid Reject/Extreme)"
       bias = "BUY"
@@ -223,7 +223,6 @@ def analyze_bbma_tf(df, role_type="TF1"):
       detail = "Struktur TF2 mendukung penurunan"
 
   elif role_type == "TF3":
-    # TF3: Trigger Eksekusi Akhir (Extreme / CSAK / Momentum / Full Setup / Re-Entry)
     if momentum_buy:
       status = "TRIGGER MOMENTUM BUY"
       bias = "BUY"
@@ -273,7 +272,7 @@ def analyze_bbma_tf(df, role_type="TF1"):
 # FETCH DATA FEED
 # -----------------------------------------------------------------------------
 with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
-  df_1d = fetch_tf_data("1d", "60d")
+  df_1d = fetch_tf_data("1d", "1y")
   df_1h = fetch_tf_data("1h", "14d")
   df_15m = fetch_tf_data("15m", "5d")
   df_5m = fetch_tf_data("5m", "1d")
@@ -463,7 +462,7 @@ def render_tab_content(tf1, tf2, tf3):
   else:
     st.error(eval_res["kesimpulan"])
 
-  # TABEL MATRIKS TIMEFRAME BERDASARKAN ATURAN BARU
+  # TABEL MATRIKS TIMEFRAME
   st.markdown("#### 📌 Matriks Validasi Hirarki Pro (TF1 ➔ TF2 ➔ TF3)")
   matrix_rows = [
       {
