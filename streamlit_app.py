@@ -17,24 +17,40 @@ st.markdown("---")
 
 @st.cache_data(ttl=60)
 def fetch_tf_data(interval, period):
-  try:
-    df = yf.download(
-        "GC=F", period=period, interval=interval, progress=False
-    )
-    if df.empty:
+  # Mapping interval ke max period yang diizinkan Yahoo Finance agar tidak kosong/error
+  safe_periods = {
+      "1m": "5d",  # 1m max 7 hari di yfinance
+      "5m": "30d",
+      "15m": "60d",
+      "1h": "730d",
+      "1d": "max",
+  }
+  # Gunakan period aman jika period yang diminta terlalu besar untuk interval kecil
+  actual_period = period
+  if interval in ["1m", "5m"] and period in ["60d", "14d"]:
+    actual_period = safe_periods.get(interval, "5d")
+
+  tickers = ["GC=F", "XAUUSD=X", "GLD"]
+  for ticker in tickers:
+    try:
       df = yf.download(
-          "XAUUSD=X", period=period, interval=interval, progress=False
+          ticker, period=actual_period, interval=interval, progress=False
       )
-    if isinstance(df.columns, pd.MultiIndex):
-      clean_df = pd.DataFrame()
-      clean_df["Open"] = df["Open"].iloc[:, 0]
-      clean_df["High"] = df["High"].iloc[:, 0]
-      clean_df["Low"] = df["Low"].iloc[:, 0]
-      clean_df["Close"] = df["Close"].iloc[:, 0]
-      df = clean_df
-    return df
-  except Exception:
-    return pd.DataFrame()
+      if not df.empty:
+        if isinstance(df.columns, pd.MultiIndex):
+          clean_df = pd.DataFrame()
+          clean_df["Open"] = df["Open"].iloc[:, 0]
+          clean_df["High"] = df["High"].iloc[:, 0]
+          clean_df["Low"] = df["Low"].iloc[:, 0]
+          clean_df["Close"] = df["Close"].iloc[:, 0]
+          df = clean_df
+        # Pastikan tidak ada NaN di kolom utama
+        df = df.dropna(subset=["Open", "High", "Low", "Close"])
+        if not df.empty:
+          return df
+    except Exception:
+      continue
+  return pd.DataFrame()
 
 
 def resample_to_h4(df_h1):
@@ -63,6 +79,7 @@ def analyze_bbma_tf(df, is_tf1=False):
         "detail": "Data tidak mencukupi",
     }
 
+  df = df.copy()
   df["MA20"] = df["Close"].rolling(window=20).mean()
   df["STD"] = df["Close"].rolling(window=20).std()
   df["TopBB"] = df["MA20"] + (df["STD"] * 2)
@@ -71,7 +88,7 @@ def analyze_bbma_tf(df, is_tf1=False):
   df["MA5_Low"] = df["Low"].rolling(window=5).mean()
 
   df = df.dropna()
-  if df.empty:
+  if df.empty or len(df) < 2:
     return {
         "price": 0.0,
         "status": "-",
@@ -160,7 +177,7 @@ def analyze_bbma_tf(df, is_tf1=False):
   }
 
 
-# Fetch Data Dasar
+# Fetch Data Dasar dengan penanganan interval yang aman
 with st.spinner("Mengambil feed data multi-timeframe XAUUSD..."):
   df_1d = fetch_tf_data("1d", "60d")
   df_1h = fetch_tf_data("1h", "14d")
