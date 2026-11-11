@@ -144,11 +144,11 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
   recent_df = df.tail(6)
   avg_body = abs(df["Close"] - df["Open"]).rolling(10).mean().iloc[-1]
 
-  # Deteksi Momentum Murni (Close menembus Top/Bottom BB)[cite: 3]
+  # Deteksi Momentum Murni (Close menembus Top/Bottom BB)
   momentum_buy = any(recent_df["Close"] <= recent_df["BottomBB"])
   momentum_sell = any(recent_df["Close"] >= recent_df["TopBB"])
 
-  # Deteksi CSAK Murni (Close melewati Mid BB / MA 20)[cite: 3]
+  # Deteksi CSAK Murni (Close melewati Mid BB / MA 20)
   csak_buy = False
   csak_sell = False
   last_csak_type = "NONE"
@@ -225,8 +225,8 @@ def analyze_bbma_tf_auto(df, role_type="TF1"):
         detail = "Struktur TF2 mendukung penurunan."
 
   elif role_type == "TF3":
-    jika_csak_buy = "BUY" if is_re_buy := (csak_buy) else False
-    jika_csak_sell = "SELL" if is_re_sell := (csak_sell) else False
+    jika_csak_buy = csak_buy
+    jika_csak_sell = csak_sell
     if structural_bias == "BUY":
       if momentum_buy or c_price <= bot_bb:
         status = "TRIGGER MOMENTUM / EXTREME BUY"
@@ -479,7 +479,7 @@ def render_tab_content(tf1, tf2, tf3):
           ),
       },
   ])
-  st.dataframe(trade_title := trade_table, use_container_width=True)
+  st.dataframe(trade_table, use_container_width=True)
 
 
 with tab1:
